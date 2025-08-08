@@ -111,6 +111,6 @@ final class IdleGameManager: ObservableObject {
 
     // MARK: - Offline Hunts
     func processOfflineHunts(for user: User, context: ModelContext) {
-        GuildManager.shared.processOfflineHunts(for: user, context: context)
+        GuildManager.shared.processHunts(for: user, deltaTime: 3600, context: context) // Process 1 hour of offline time
     }
 }

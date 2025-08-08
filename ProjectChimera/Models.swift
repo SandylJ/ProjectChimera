@@ -160,6 +160,7 @@ final class User {
         set { huntKillTallyData = (try? JSONEncoder().encode(newValue)) ?? Data() }
     }
     var unclaimedHuntGold: Int = 0
+    var unclaimedHuntItems: [UnclaimedHuntItem] = []
     private var unlockedSpellIDsData: Data = Data()
     var unlockedSpellIDs: [String] {
         get { (try? JSONDecoder().decode([String].self, from: unlockedSpellIDsData)) ?? [] }
@@ -667,6 +668,28 @@ final class AltarOfWhispers {
     var goldGenerationUpgradeCost: Double {
         return pow(50, Double(goldGenerationLevel + 1)) // Use +1 because it starts at 0
     }
+}
+
+@Model
+final class UnclaimedHuntItem {
+    var id: UUID
+    var itemID: String
+    var quantity: Int
+    var owner: User?
+    
+    init(itemID: String, quantity: Int, owner: User?) {
+        self.id = UUID()
+        self.itemID = itemID
+        self.quantity = quantity
+        self.owner = owner
+    }
+}
+
+struct HuntItemDrop {
+    let itemID: String
+    let dropRate: Double
+    let minQuantity: Int
+    let maxQuantity: Int
 }
 
 // MARK: - Game Data (Not stored in SwiftData)

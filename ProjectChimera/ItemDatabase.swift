@@ -310,27 +310,140 @@ private extension ItemDatabase {
 
     static func createAllExpeditions() -> [Expedition] {
         return [
+            // Beginner Expeditions (1 member, short duration)
             Expedition(
                 id: "exp_whispering_woods",
                 name: "Forage the Whispering Woods",
-                description: "A simple journey to gather common materials.",
-                duration: 3600,
+                description: "A simple journey to gather common materials from the nearby forest.",
+                duration: 3600, // 1 hour
                 minMembers: 1,
                 requiredRoles: [.forager],
-                lootTable: ["material_essence": 80],
+                lootTable: ["material_essence": 80, "material_sunwheat_grain": 50],
                 xpReward: 50
             ),
+            Expedition(
+                id: "exp_crystal_caves",
+                name: "Explore Crystal Caves",
+                description: "A short expedition to gather crystals and minerals.",
+                duration: 7200, // 2 hours
+                minMembers: 1,
+                requiredRoles: [.alchemist],
+                lootTable: ["material_dream_shard": 40, "material_sunstone_shard": 20],
+                xpReward: 100
+            ),
+            
+            // Intermediate Expeditions (2+ members, medium duration)
             Expedition(
                 id: "exp_sunken_ruins",
                 name: "Explore the Sunken Ruins",
                 description: "A dangerous trek into ancient, waterlogged ruins.",
-                duration: 14400,
-                minMembers: 1,
-                requiredRoles: [.alchemist],
-                lootTable: ["material_dream_shard": 40],
+                duration: 14400, // 4 hours
+                minMembers: 2,
+                requiredRoles: [.alchemist, .seer],
+                lootTable: ["material_dream_shard": 60, "material_sunstone_shard": 30, "item_ancient_key": 1],
                 xpReward: 200
+            ),
+            Expedition(
+                id: "exp_ironwood_forest",
+                name: "Harvest Ironwood Forest",
+                description: "A challenging expedition to gather rare Ironwood materials.",
+                duration: 18000, // 5 hours
+                minMembers: 2,
+                requiredRoles: [.forager, .blacksmith],
+                lootTable: ["material_ironwood_bark": 25, "material_essence": 100],
+                xpReward: 250
+            ),
+            Expedition(
+                id: "exp_glowcap_grove",
+                name: "Gather Glowcap Mushrooms",
+                description: "A mystical journey to collect rare glowing mushrooms.",
+                duration: 10800, // 3 hours
+                minMembers: 2,
+                requiredRoles: [.forager, .alchemist],
+                lootTable: ["material_glowcap_spore": 40, "material_dream_shard": 30],
+                xpReward: 150
+            ),
+            
+            // Advanced Expeditions (3+ members, long duration)
+            Expedition(
+                id: "exp_ancient_temple",
+                name: "Raid Ancient Temple",
+                description: "A perilous expedition into a forgotten temple filled with treasures.",
+                duration: 28800, // 8 hours
+                minMembers: 3,
+                requiredRoles: [.knight, .wizard, .cleric],
+                lootTable: ["material_sunstone_shard": 50, "material_dream_shard": 80, "item_ancient_key": 2, "item_elixir_strength": 1],
+                xpReward: 400
+            ),
+            Expedition(
+                id: "exp_dragon_peak",
+                name: "Scale Dragon Peak",
+                description: "An epic journey to the highest peak, rumored to hold dragon treasures.",
+                duration: 43200, // 12 hours
+                minMembers: 4,
+                requiredRoles: [.knight, .archer, .wizard, .cleric],
+                lootTable: ["material_sunstone_shard": 100, "material_dream_shard": 150, "item_ancient_key": 3, "item_scroll_fortune": 1],
+                xpReward: 600
+            ),
+            
+            // Specialized Expeditions
+            Expedition(
+                id: "exp_garden_harvest",
+                name: "Mass Garden Harvest",
+                description: "A coordinated effort to harvest all ready plants from the garden.",
+                duration: 5400, // 1.5 hours
+                minMembers: 2,
+                requiredRoles: [.gardener, .forager],
+                lootTable: ["material_sunwheat_grain": 100, "material_glowcap_spore": 30, "material_essence": 120],
+                xpReward: 120
+            ),
+            Expedition(
+                id: "exp_alchemy_lab",
+                name: "Alchemy Laboratory",
+                description: "A focused session in the alchemy lab to create powerful potions.",
+                duration: 9000, // 2.5 hours
+                minMembers: 2,
+                requiredRoles: [.alchemist, .seer],
+                lootTable: ["item_potion_vigor": 3, "item_elixir_strength": 2, "material_dream_shard": 50],
+                xpReward: 180
+            ),
+            Expedition(
+                id: "exp_blacksmith_forge",
+                name: "Master Blacksmith Forge",
+                description: "A specialized expedition to craft and enhance equipment.",
+                duration: 12600, // 3.5 hours
+                minMembers: 2,
+                requiredRoles: [.blacksmith, .knight],
+                lootTable: ["equip_iron_helmet": 1, "equip_scholars_robe": 1, "material_ironwood_bark": 40],
+                xpReward: 200
+            ),
+            
+            // Combat Expeditions
+            Expedition(
+                id: "exp_goblin_raid",
+                name: "Goblin Raid",
+                description: "A combat expedition to clear goblin infestations.",
+                duration: 7200, // 2 hours
+                minMembers: 2,
+                requiredRoles: [.knight, .archer],
+                lootTable: ["material_essence": 60, "item_potion_vigor": 2],
+                xpReward: 150
+            ),
+            Expedition(
+                id: "exp_bandit_camp",
+                name: "Clear Bandit Camp",
+                description: "A dangerous mission to eliminate bandit threats.",
+                duration: 10800, // 3 hours
+                minMembers: 3,
+                requiredRoles: [.knight, .rogue, .wizard],
+                lootTable: ["material_sunstone_shard": 40, "item_elixir_strength": 1, "item_scroll_fortune": 1],
+                xpReward: 250
             )
         ]
+    }
+    
+    static func getAllExpeditions() -> [Expedition] {
+        return createAllExpeditions()
     }
 }
 

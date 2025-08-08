@@ -32,13 +32,54 @@ final class GuildManager: ObservableObject {
         member.level += 1
     }
     
+    // MARK: - Expedition Management
+    
     func launchExpedition(expeditionID: String, with memberIDs: [UUID], for user: User, context: ModelContext) {
+        // Mark members as busy
         memberIDs.forEach { id in
             user.guildMembers?.first(where: { $0.id == id })?.isOnExpedition = true
         }
         
+        // Create new expedition
         let newExpedition = ActiveExpedition(expeditionID: expeditionID, memberIDs: memberIDs, startTime: .now, owner: user)
         user.activeExpeditions?.append(newExpedition)
+        
+        // Add to context
+        context.insert(newExpedition)
+        
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save expedition: \(error)")
+        }
+    }
+    
+    func completeExpedition(expedition: ActiveExpedition, for user: User, context: ModelContext) {
+        guard let expeditionData = expedition.expedition else { return }
+        
+        // Give rewards
+        user.totalXP += expeditionData.xpReward
+        user.gold += calculateGoldReward(for: expeditionData, memberCount: expedition.memberIDs.count)
+        
+        // Add items to inventory
+        for (itemID, quantity) in expeditionData.lootTable {
+            addItemToInventory(itemID: itemID, quantity: quantity, for: user)
+        }
+        
+        // Free up members
+        expedition.memberIDs.forEach { id in
+            user.guildMembers?.first(where: { $0.id == id })?.isOnExpedition = false
+        }
+        
+        // Remove expedition
+        user.activeExpeditions?.removeAll { $0.id == expedition.id }
+        context.delete(expedition)
+        
+        do {
+            try context.save()
+        } catch {
+            print("Failed to complete expedition: \(error)")
+        }
     }
     
     func checkCompletedExpeditions(for user: User, context: ModelContext) {
@@ -47,14 +88,24 @@ final class GuildManager: ObservableObject {
         let completedExpeditions = expeditions.filter { $0.endTime <= .now }
         
         for expedition in completedExpeditions {
-            user.totalXP += expedition.expedition?.xpReward ?? 0
-            user.gold += 100
-            
-            expedition.memberIDs.forEach { id in
-                user.guildMembers?.first(where: { $0.id == id })?.isOnExpedition = false
-            }
-            
-            context.delete(expedition)
+            completeExpedition(expedition: expedition, for: user, context: context)
+        }
+    }
+    
+    private func calculateGoldReward(for expedition: Expedition, memberCount: Int) -> Int {
+        let baseGold = 50 + (expedition.xpReward / 10)
+        let memberBonus = memberCount * 25
+        return baseGold + memberBonus
+    }
+    
+    private func addItemToInventory(itemID: String, quantity: Int, for user: User) {
+        // Check if item already exists in inventory
+        if let existingItem = user.inventory?.first(where: { $0.itemID == itemID }) {
+            existingItem.quantity += quantity
+        } else {
+            // Create new inventory item
+            let newItem = InventoryItem(itemID: itemID, quantity: quantity, owner: user)
+            user.inventory?.append(newItem)
         }
     }
 
@@ -81,160 +132,160 @@ final class GuildManager: ObservableObject {
     // MARK: - Guild Bounties
 
     func generateDailyBounties(for user: User, context: ModelContext) {
-        // For simplicity, generate 3 random bounties daily
-        // In a real game, you'd have a master list of bounty templates
         guard user.guildBounties?.isEmpty ?? true else { return }
-
-        // One combat bounty (goblins)
-        let goblinBounty = GuildBounty(
-            title: "Defeat 5 Goblins",
-            bountyDescription: "Slay the pesky goblins infesting the forest.",
-            requiredProgress: 5,
-            guildXpReward: 100,
-            guildSealReward: 10,
-            owner: user,
-            targetEnemyID: "enemy_goblin"
-        )
-        context.insert(goblinBounty)
-        user.guildBounties?.append(goblinBounty)
-
-        // Two non-combat bounties (placeholder reuse of previous style)
-        for _ in 0..<2 {
-            let newBounty = GuildBounty(
-                title: "Gather Supplies",
-                bountyDescription: "Assist the guild with miscellaneous tasks.",
-                requiredProgress: 3,
-                guildXpReward: 60,
-                guildSealReward: 6,
-                owner: user
-            )
-            context.insert(newBounty)
-            user.guildBounties?.append(newBounty)
+        
+        let bounties = [
+            GuildBounty(title: "Defeat 10 Goblins", bountyDescription: "Hunt down goblins in the forest", requiredProgress: 10, guildXpReward: 100, guildSealReward: 10, owner: user, targetEnemyID: "enemy_goblin"),
+            GuildBounty(title: "Craft 5 Potions", bountyDescription: "Brew healing potions", requiredProgress: 5, guildXpReward: 150, guildSealReward: 15, owner: user),
+            GuildBounty(title: "Walk 5000 Steps", bountyDescription: "Stay active and explore", requiredProgress: 5000, guildXpReward: 75, guildSealReward: 8, owner: user)
+        ]
+        
+        user.guildBounties = bounties
+        
+        for bounty in bounties {
+            context.insert(bounty)
         }
     }
-
+    
     func completeBounty(bounty: GuildBounty, for user: User) {
-        guard bounty.currentProgress >= bounty.requiredProgress else { return }
-        bounty.isActive = false // Mark as completed
+        user.gold += bounty.guildXpReward
+        user.guildBounties?.removeAll { $0.id == bounty.id }
+        
+        // Add guild XP
         addGuildXP(bounty.guildXpReward, for: user)
-        user.guildSeals += bounty.guildSealReward
     }
-
-    // MARK: - Blacksmith Logic
-
-    func blacksmithCraftMaterial(for user: User, context: ModelContext) {
-        // Example: Blacksmith passively crafts 'material_iron_ore'
-        // This would be more complex with different materials and success rates
-        if let ironOre = user.inventory?.first(where: { $0.itemID == "material_iron_ore" }) {
-            ironOre.quantity += 1
-        } else {
-            let newItem = InventoryItem(itemID: "material_iron_ore", quantity: 1, owner: user)
-            user.inventory?.append(newItem)
-        }
-    }
-
-    func blacksmithEnhanceEquipment(item: InventoryItem, for user: User) {
-        // Example: Blacksmith enhances an equipped item
-        // This would involve modifying the item's bonuses directly or creating a new item
-        // For simplicity, let's just say it increases a random stat on the item
-        guard let equippedItem = ItemDatabase.shared.getItem(id: item.itemID), equippedItem.itemType == .equippable else { return }
-
-        // This is a placeholder. Actual implementation would be more complex.
-        print("Blacksmith enhanced \(equippedItem.name)!")
-    }
-
-    // MARK: - Hunts (Passive Combat)
-
-    func startHunt(enemyID: String, with memberIDs: [UUID], for user: User, context: ModelContext) {
-        guard !memberIDs.isEmpty else { return }
-        let hunt = ActiveHunt(enemyID: enemyID, memberIDs: memberIDs, owner: user)
-        context.insert(hunt)
-        user.activeHunts?.append(hunt)
-    }
-
-    func stopHunt(_ hunt: ActiveHunt, for user: User, context: ModelContext) {
-        if let idx = user.activeHunts?.firstIndex(where: { $0.id == hunt.id }) {
-            let toDelete = user.activeHunts!.remove(at: idx)
-            context.delete(toDelete)
-        }
-    }
-
-    func totalPartyDPS(memberIDs: [UUID], on user: User) -> Double {
-        let members = (user.guildMembers ?? []).filter { memberIDs.contains($0.id) }
-        let baseDPS = members.reduce(0.0) { $0 + $1.combatDPS() }
-        let clericLevels = members.filter { $0.role == .cleric }.reduce(0) { $0 + $1.level }
-        let clericMultiplier = 1.0 + (Double(clericLevels) * 0.10)
-        return baseDPS * clericMultiplier
-    }
-
+    
     func processHunts(for user: User, deltaTime: TimeInterval, context: ModelContext) {
-        guard let hunts = user.activeHunts, !hunts.isEmpty else { return }
-        let goldBoostMultiplier: Double = {
-            var m = 1.0
-            for (effect, expiry) in user.activeBuffs where Date() < expiry {
-                if case .goldBoost(let multi) = effect { m *= (1.0 + multi) }
-            }
-            return m
-        }()
-
-        for hunt in hunts {
-            // Keep hunt party in sync with current combatants so newly hired mercs matter immediately
-            let currentCombatantIDs = (user.guildMembers ?? []).filter { $0.isCombatant }.map { $0.id }
-            if hunt.memberIDs != currentCombatantIDs { hunt.memberIDs = currentCombatantIDs }
+        guard let activeHunts = user.activeHunts, !activeHunts.isEmpty else { return }
+        
+        for hunt in activeHunts {
+            let killsPerSecond = calculateHuntKillsPerSecond(hunt: hunt, user: user)
+            let newKills = Int(killsPerSecond * deltaTime)
             
-            guard let enemy = hunt.enemy else { continue }
-            let dps = totalPartyDPS(memberIDs: hunt.memberIDs, on: user)
-            guard dps > 0 else { continue }
-            let damage = dps * deltaTime
-            let kills = Int(floor(damage / max(1.0, enemy.health)))
-            if kills > 0 {
-                hunt.killsAccumulated += kills
-                
-                // Mercenary-based gold multiplier: modest, scales with party size and role diversity, with a soft cap
-                let members = (user.guildMembers ?? []).filter { hunt.memberIDs.contains($0.id) }
-                let partyCount = members.count
-                let uniqueRoles = Set(members.map { $0.role }).count
-                let mercGoldMultiplier = min(1.0 + 0.04 * Double(partyCount) + 0.03 * Double(uniqueRoles), 1.75)
-                
-                let goldEarned = Int(Double(enemy.goldPerKill * kills) * goldBoostMultiplier * mercGoldMultiplier)
-                user.unclaimedHuntGold += goldEarned
-                var tally = user.huntKillTally
-                tally[enemy.id, default: 0] += kills
-                user.huntKillTally = tally
-                // Progress any matching combat bounties
-                if let bounties = user.guildBounties {
-                    for bounty in bounties where bounty.isActive {
-                        if let target = bounty.targetEnemyID, target == enemy.id {
-                            bounty.currentProgress = min(bounty.requiredProgress, bounty.currentProgress + kills)
-                            // Auto-complete combat bounties when requirements are met
-                            if bounty.currentProgress >= bounty.requiredProgress {
-                                completeBounty(bounty: bounty, for: user)
-                            }
-                        }
-                    }
-                }
+            hunt.killsAccumulated += newKills
+            hunt.lastUpdated = .now
+            
+            // Add gold to unclaimed pool
+            if let enemy = hunt.enemy {
+                user.unclaimedHuntGold += newKills * enemy.goldPerKill
+            } else {
+                // Default gold per kill if enemy data not available
+                user.unclaimedHuntGold += newKills * 5
             }
-            hunt.lastUpdated = Date()
+            
+            // Generate item rewards based on kills
+            generateHuntItemRewards(kills: newKills, enemyID: hunt.enemyID, for: user)
         }
     }
-
-    func processOfflineHunts(for user: User, context: ModelContext) {
-        guard let hunts = user.activeHunts, !hunts.isEmpty else { return }
-        let now = Date()
-        for hunt in hunts {
-            let delta = now.timeIntervalSince(hunt.lastUpdated)
-            guard delta > 1 else { continue }
-            let before = hunt.killsAccumulated
-            processHunts(for: user, deltaTime: delta, context: context)
-            // Ensure we do not reapply delta repeatedly in a loop; lastUpdated is set in processHunts.
-            let _ = before
+    
+    private func calculateHuntKillsPerSecond(hunt: ActiveHunt, user: User) -> Double {
+        let totalDPS = hunt.memberIDs.compactMap { memberID in
+            user.guildMembers?.first { $0.id == memberID }
+        }.reduce(0.0) { total, member in
+            total + member.combatDPS()
+        }
+        
+        // Convert DPS to kills per second (simplified)
+        return totalDPS / 10.0 // Assuming 10 DPS = 1 kill per second
+    }
+    
+    private func generateHuntItemRewards(kills: Int, enemyID: String, for user: User) {
+        // Base chance for items (higher for more kills)
+        let baseChance = min(Double(kills) * 0.1, 0.8) // Max 80% chance
+        
+        // Different item pools for different enemies
+        let itemPool = getItemPoolForEnemy(enemyID)
+        
+        for item in itemPool {
+            let chance = baseChance * item.dropRate
+            if Double.random(in: 0...1) < chance {
+                let quantity = Int.random(in: item.minQuantity...item.maxQuantity)
+                addUnclaimedHuntItem(itemID: item.itemID, quantity: quantity, for: user)
+            }
         }
     }
-
-    // MARK: - Claim Hunt Rewards
-    func claimHuntRewards(for user: User) {
-        guard user.unclaimedHuntGold > 0 else { return }
-        user.gold += user.unclaimedHuntGold
-        user.unclaimedHuntGold = 0
+    
+    private func getItemPoolForEnemy(_ enemyID: String) -> [HuntItemDrop] {
+        switch enemyID {
+        case "enemy_goblin":
+            return [
+                HuntItemDrop(itemID: "material_essence", dropRate: 0.3, minQuantity: 1, maxQuantity: 3),
+                HuntItemDrop(itemID: "item_potion_vigor", dropRate: 0.1, minQuantity: 1, maxQuantity: 1),
+                HuntItemDrop(itemID: "material_sunwheat_grain", dropRate: 0.2, minQuantity: 2, maxQuantity: 5)
+            ]
+        case "enemy_zombie":
+            return [
+                HuntItemDrop(itemID: "material_dream_shard", dropRate: 0.25, minQuantity: 1, maxQuantity: 2),
+                HuntItemDrop(itemID: "item_elixir_strength", dropRate: 0.08, minQuantity: 1, maxQuantity: 1),
+                HuntItemDrop(itemID: "material_glowcap_spore", dropRate: 0.15, minQuantity: 1, maxQuantity: 3)
+            ]
+        case "enemy_spider":
+            return [
+                HuntItemDrop(itemID: "material_sunstone_shard", dropRate: 0.2, minQuantity: 1, maxQuantity: 2),
+                HuntItemDrop(itemID: "item_scroll_fortune", dropRate: 0.05, minQuantity: 1, maxQuantity: 1),
+                HuntItemDrop(itemID: "material_ironwood_bark", dropRate: 0.1, minQuantity: 1, maxQuantity: 2)
+            ]
+        case "enemy_skeleton":
+            return [
+                HuntItemDrop(itemID: "material_dream_shard", dropRate: 0.3, minQuantity: 2, maxQuantity: 4),
+                HuntItemDrop(itemID: "equip_iron_helmet", dropRate: 0.03, minQuantity: 1, maxQuantity: 1),
+                HuntItemDrop(itemID: "item_elixir_strength", dropRate: 0.12, minQuantity: 1, maxQuantity: 2)
+            ]
+        case "enemy_ghost":
+            return [
+                HuntItemDrop(itemID: "material_sunstone_shard", dropRate: 0.25, minQuantity: 2, maxQuantity: 4),
+                HuntItemDrop(itemID: "item_scroll_fortune", dropRate: 0.08, minQuantity: 1, maxQuantity: 1),
+                HuntItemDrop(itemID: "equip_scholars_robe", dropRate: 0.02, minQuantity: 1, maxQuantity: 1)
+            ]
+        case "enemy_dragon":
+            return [
+                HuntItemDrop(itemID: "material_sunstone_shard", dropRate: 0.4, minQuantity: 3, maxQuantity: 6),
+                HuntItemDrop(itemID: "item_ancient_key", dropRate: 0.15, minQuantity: 1, maxQuantity: 2),
+                HuntItemDrop(itemID: "equip_gauntlets_of_strength", dropRate: 0.05, minQuantity: 1, maxQuantity: 1),
+                HuntItemDrop(itemID: "item_scroll_fortune", dropRate: 0.1, minQuantity: 1, maxQuantity: 2)
+            ]
+        default:
+            return [
+                HuntItemDrop(itemID: "material_essence", dropRate: 0.2, minQuantity: 1, maxQuantity: 2)
+            ]
+        }
+    }
+    
+    private func addUnclaimedHuntItem(itemID: String, quantity: Int, for user: User) {
+        // Check if item already exists in unclaimed items
+        if let existingItem = user.unclaimedHuntItems.first(where: { $0.itemID == itemID }) {
+            existingItem.quantity += quantity
+        } else {
+            // Create new unclaimed item
+            let newItem = UnclaimedHuntItem(itemID: itemID, quantity: quantity, owner: user)
+            user.unclaimedHuntItems.append(newItem)
+        }
+    }
+    
+    // MARK: - Scaling Costs
+    
+    func getHireCost(for role: GuildMember.Role, user: User) -> Int {
+        let baseCost = 250
+        let existingCount = (user.guildMembers ?? []).filter { $0.role == role }.count
+        let scalingMultiplier = pow(1.5, Double(existingCount))
+        return Int(Double(baseCost) * scalingMultiplier)
+    }
+    
+    func getUpgradeCost(for member: GuildMember) -> Int {
+        let baseCost = 100
+        let levelScaling = pow(2.0, Double(member.level - 1))
+        let roleMultiplier = getRoleUpgradeMultiplier(for: member.role)
+        return Int(Double(baseCost) * levelScaling * roleMultiplier)
+    }
+    
+    private func getRoleUpgradeMultiplier(for role: GuildMember.Role) -> Double {
+        switch role {
+        case .knight: return 1.0
+        case .archer: return 1.2
+        case .wizard: return 1.5
+        case .rogue: return 1.3
+        case .cleric: return 1.4
+        default: return 1.0
+        }
     }
 }
