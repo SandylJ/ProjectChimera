@@ -185,11 +185,16 @@ final class GuildManager: ObservableObject {
     }
     
     func completeBounty(bounty: GuildBounty, for user: User) {
-        user.gold += bounty.guildXpReward
-        user.guildBounties?.removeAll { $0.id == bounty.id }
-        
-        // Add guild XP
+        // Award guild XP and seals
         addGuildXP(bounty.guildXpReward, for: user)
+        user.guildSeals += bounty.guildSealReward
+        
+        // Optional: small gold bonus equal to 10% of XP
+        user.gold += max(0, bounty.guildXpReward / 10)
+        
+        // Mark inactive and remove from list
+        bounty.isActive = false
+        user.guildBounties?.removeAll { $0.id == bounty.id }
     }
     
     func processHunts(for user: User, deltaTime: TimeInterval, context: ModelContext) {
