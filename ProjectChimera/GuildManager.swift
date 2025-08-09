@@ -99,6 +99,36 @@ final class GuildManager: ObservableObject {
         }
     }
     
+    func cleanupInvalidExpeditions(for user: User, context: ModelContext) {
+        guard let expeditions = user.activeExpeditions, !expeditions.isEmpty else { return }
+        
+        let invalidExpeditions = expeditions.filter { expedition in
+            ItemDatabase.shared.getExpedition(id: expedition.expeditionID) == nil
+        }
+        
+        for expedition in invalidExpeditions {
+            // Free up members that were on this invalid expedition
+            expedition.memberIDs.forEach { id in
+                user.guildMembers?.first(where: { $0.id == id })?.isOnExpedition = false
+            }
+            
+            // Remove expedition from user's list
+            user.activeExpeditions?.removeAll { $0.id == expedition.id }
+            
+            // Delete from context
+            context.delete(expedition)
+        }
+        
+        if !invalidExpeditions.isEmpty {
+            do {
+                try context.save()
+                print("Cleaned up \(invalidExpeditions.count) invalid expeditions")
+            } catch {
+                print("Failed to cleanup invalid expeditions: \(error)")
+            }
+        }
+    }
+    
     private func calculateGoldReward(for expedition: Expedition, memberCount: Int) -> Int {
         let baseGold = 50 + (expedition.xpReward / 10)
         let memberBonus = memberCount * 25

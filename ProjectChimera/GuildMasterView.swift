@@ -2170,11 +2170,15 @@ struct GuildExpeditionsTab: View {
         .onAppear {
             // Check for completed expeditions
             GuildManager.shared.checkCompletedExpeditions(for: user, context: modelContext)
+            // Clean up any invalid expeditions
+            GuildManager.shared.cleanupInvalidExpeditions(for: user, context: modelContext)
         }
         .onReceive(timer) { newDate in
             self.now = newDate
             // Check for completed expeditions every second
             GuildManager.shared.checkCompletedExpeditions(for: user, context: modelContext)
+            // Clean up any invalid expeditions periodically
+            GuildManager.shared.cleanupInvalidExpeditions(for: user, context: modelContext)
         }
     }
 }
