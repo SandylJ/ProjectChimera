@@ -37,6 +37,7 @@ struct AltarOfWhispersView: View {
                     if let altar = altar {
                         statsView(altar: altar)
                         upgradesView(altar: altar)
+                        ritualsView(altar: altar)
                     } else {
                         Text("The Altar is dormant. Return later.")
                             .font(.subheadline)
@@ -88,12 +89,15 @@ struct AltarOfWhispersView: View {
                 .font(.system(.title, design: .monospaced).bold())
                 .foregroundColor(.white)
             
-            HStack {
-                Label(String(format: "%.2f/sec", IdleGameManager.shared.totalEchoesPerSecond(for: user)), systemImage: "arrow.up.right.circle.fill")
-                Label(String(format: "%.2f Gold/sec", altar.goldPerSecond), systemImage: "dollarsign.circle.fill")
-                Label(String(format: "%.4f Runes/sec", altar.runesPerSecond), systemImage: "sparkles")
-            }
-            .font(.caption)
+                         HStack {
+                 Label(String(format: "%.2f/sec", IdleGameManager.shared.totalEchoesPerSecond(for: user)), systemImage: "arrow.up.right.circle.fill")
+                 Label(String(format: "%.2f Gold/sec", altar.goldPerSecond), systemImage: "dollarsign.circle.fill")
+                 Label(String(format: "%.4f Runes/sec", altar.runesPerSecond), systemImage: "sparkles")
+                 if user.activeBuffs.keys.contains(where: { if case .echoBoost = $0 { return true } else { return false } }) {
+                     Label("Echo Surge", systemImage: "bolt.fill")
+                 }
+             }
+.font(.caption)
             .foregroundColor(.white.opacity(0.8))
         }
         .padding()
@@ -156,6 +160,94 @@ struct AltarOfWhispersView: View {
                 }
             )
         }
+    }
+
+    // MARK: - Rituals
+    private func ritualsView(altar: AltarOfWhispers) -> some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("Rituals")
+                .font(.title2.bold())
+                .foregroundColor(.white)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                // Echo Surge Buff
+                ritualRow(
+                    title: "Echo Surge",
+                    description: "Boost Echoes by +50% for 10 minutes.",
+                    costText: "Cost: 100 Echoes",
+                    canAfford: altar.echoes >= 100
+                ) {
+                    if altar.echoes >= 100 { altar.echoes -= 100 }
+                    // 10 minute surge with +50%
+                    let surge = SpellEffect.echoBoost(0.5)
+                    let duration: TimeInterval = 600
+                    let expiry = Date().addingTimeInterval(duration)
+                    user.activeBuffs[surge] = expiry
+                }
+
+                // Transmute Echoes -> Gold
+                ritualRow(
+                    title: "Transmute: Gold",
+                    description: "Convert 50 Echoes into 500 Gold.",
+                    costText: "Cost: 50 Echoes",
+                    canAfford: altar.echoes >= 50
+                ) {
+                    if altar.echoes >= 50 {
+                        altar.echoes -= 50
+                        user.gold += 500
+                    }
+                }
+
+                // Transmute Echoes -> Runes
+                ritualRow(
+                    title: "Transmute: Runes",
+                    description: "Convert 100 Echoes into 5 Runes.",
+                    costText: "Cost: 100 Echoes",
+                    canAfford: altar.echoes >= 100
+                ) {
+                    if altar.echoes >= 100 {
+                        altar.echoes -= 100
+                        user.runes += 5
+                    }
+                }
+
+                // Transmute Echoes -> Willpower
+                ritualRow(
+                    title: "Transmute: Willpower",
+                    description: "Convert 25 Echoes into 50 Willpower.",
+                    costText: "Cost: 25 Echoes",
+                    canAfford: altar.echoes >= 25
+                ) {
+                    if altar.echoes >= 25 {
+                        altar.echoes -= 25
+                        user.willpower += 50
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    @ViewBuilder
+    private func ritualRow(title: String, description: String, costText: String, canAfford: Bool, action: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title).font(.headline)
+                Spacer()
+                Text(costText).font(.caption).foregroundColor(.secondary)
+            }
+            Text(description).font(.caption).foregroundColor(.secondary)
+            Button(action: action) {
+                HStack { Image(systemName: "wand.and.stars"); Text("Perform Ritual") }.frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(canAfford ? .purple : .gray)
+            .disabled(!canAfford)
+        }
+        .padding()
+        .background(Material.regular)
+        .cornerRadius(15)
     }
 
     private func triggerHapticFeedback() {

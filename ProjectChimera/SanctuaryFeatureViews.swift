@@ -398,7 +398,7 @@ struct GuildHallView: View {
             statCard(title: "Bounties", value: "\(activeBounties.count)", icon: "scroll.fill", tint: .orange)
             statCard(title: "Garden Ready", value: "\(readyToHarvestCount)", icon: "leaf.fill", tint: .green)
             let eps = String(format: "%.2f/s", IdleGameManager.shared.totalEchoesPerSecond(for: user))
-            statCard(title: "Echoes", value: eps, icon: "flame.fill", tint: .purple)
+            statCard(title: "Echoes", value: eps + (user.activeBuffs.keys.contains(where: { if case .echoBoost = $0 { return true } else { return false } }) ? " (+)" : ""), icon: "flame.fill", tint: .purple)
         }
         .padding(.horizontal)
     }

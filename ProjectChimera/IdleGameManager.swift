@@ -87,7 +87,14 @@ final class IdleGameManager: ObservableObject {
             .filter { $0.role == .seer }
             .reduce(0.0) { $0 + (Double($1.level) * 0.1) } ?? 0.0) : 0.0
 
-        return altar.echoesPerSecond * (1.0 + seerBonus)
+        var eps = altar.echoesPerSecond * (1.0 + seerBonus)
+        // Apply echo boost buffs
+        for (effect, expiry) in user.activeBuffs {
+            if Date() <= expiry, case .echoBoost(let multiplier) = effect {
+                eps *= (1.0 + multiplier)
+            }
+        }
+        return eps
     }
 
     func grantLoot(_ loot: LootReward, to user: User, context: ModelContext) {

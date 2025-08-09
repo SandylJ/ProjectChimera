@@ -67,6 +67,7 @@ enum SpellEffect: Codable, Hashable {
     case reducedUpgradeCost(Double)
     case guildXpBoost(Double)
     case plantGrowthSpeed(Double)
+    case echoBoost(Double)
 }
 
 struct Spell: Codable, Hashable, Identifiable {

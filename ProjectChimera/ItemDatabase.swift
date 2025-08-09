@@ -50,6 +50,14 @@ final class ItemDatabase {
             requiredLevel: 1,
             runeCost: 1,
             effect: .doubleGold
+        ),
+        Spell(
+            id: "spell_echo_surge",
+            name: "Echo Surge",
+            description: "+50% Echoes for 10 minutes",
+            requiredLevel: 5,
+            runeCost: 2,
+            effect: .echoBoost(0.5)
         )
     ]
 
