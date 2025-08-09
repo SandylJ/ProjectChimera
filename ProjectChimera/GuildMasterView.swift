@@ -3429,4 +3429,22 @@ extension GuildMember.Role {
             return ""
         }
     }
+    
+    var isCombatantRole: Bool {
+        switch self {
+        case .knight, .archer, .wizard, .rogue, .cleric:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    var isGathererRole: Bool {
+        switch self {
+        case .forager, .gardener, .alchemist, .seer, .blacksmith:
+            return true
+        default:
+            return false
+        }
+    }
 }

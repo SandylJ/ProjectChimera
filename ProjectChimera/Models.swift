@@ -44,6 +44,10 @@ enum QuestStatus: String, Codable {
     case available, active, completed
 }
 
+enum ExpeditionMode: String, Codable, CaseIterable {
+    case all, combat, gathering
+}
+
 enum LootReward: Codable, Hashable, Identifiable {
     var id: UUID { UUID() }
     case currency(Int)
