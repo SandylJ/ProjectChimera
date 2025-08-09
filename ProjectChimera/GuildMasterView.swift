@@ -2352,27 +2352,19 @@ struct ActiveExpeditionCard: View {
                         .background(Color.blue.opacity(0.2))
                         .cornerRadius(4)
                         
-                        // Item Rewards - Show total quantities with one icon per type
+                        // Item Rewards - Single icon with summarized quantities
                         let groupedItems = groupedRewards(expeditionData.lootTable)
-                        ForEach(Array(groupedItems.sorted(by: { $0.key < $1.key }).prefix(2)), id: \.key) { item in
-                            HStack(spacing: 4) {
-                                Image(systemName: "bag.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.green)
-                                Text("\(item.value)x \(item.key)")
-                                    .font(.caption)
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.2))
-                            .cornerRadius(4)
-                        }
-                        
-                        if groupedItems.count > 2 {
-                            Text("+\(groupedItems.count - 2) more")
+                        HStack(spacing: 4) {
+                            Image(systemName: "bag.fill")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.green)
+                            Text(lootSummaryText(groupedItems))
+                                .font(.caption)
                         }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.2))
+                        .cornerRadius(4)
                     }
                 }
             }
@@ -2439,6 +2431,21 @@ struct ActiveExpeditionCard: View {
         case .archer, .rogue: return .gray
         case .wizard: return .indigo
         }
+    }
+    
+    private func lootSummaryText(_ groupedItems: [String: Int], limit: Int? = nil) -> String {
+        let sorted = groupedItems.sorted { $0.key < $1.key }
+        let limited: ArraySlice<(key: String, value: Int)>
+        if let limit = limit {
+            limited = sorted.prefix(limit)
+        } else {
+            limited = sorted[sorted.startIndex..<sorted.endIndex]
+        }
+        var components = limited.map { "\($0.value)x \($0.key)" }
+        if let limit = limit, sorted.count > limit {
+            components.append("+\(sorted.count - limit) more")
+        }
+        return components.joined(separator: ", ")
     }
 }
 
@@ -2553,20 +2560,19 @@ struct AvailableExpeditionCard: View {
                     .background(Color.blue.opacity(0.2))
                     .cornerRadius(4)
                 
-                ForEach(Array(expedition.lootTable.prefix(2)), id: \.key) { item in
-                    Text("\(item.value)x \(formatItemName(item.key))")
+                // Single bag icon with summarized rewards
+                let groupedItems = groupedRewards(expedition.lootTable)
+                HStack(spacing: 4) {
+                    Image(systemName: "bag.fill")
                         .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.2))
-                        .cornerRadius(4)
-                }
-                
-                if expedition.lootTable.count > 2 {
-                    Text("+\(expedition.lootTable.count - 2) more")
+                        .foregroundColor(.green)
+                    Text(lootSummaryText(groupedItems, limit: 2))
                         .font(.caption)
-                        .foregroundColor(.secondary)
                 }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.green.opacity(0.2))
+                .cornerRadius(4)
             }
             
             Button(canLaunch ? "Launch Expedition" : "Insufficient Members") {
@@ -2594,6 +2600,24 @@ struct AvailableExpeditionCard: View {
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
         return name
+    }
+    
+    private func groupedRewards(_ lootTable: [String: Int]) -> [String: Int] {
+        var grouped: [String: Int] = [:]
+        for (itemID, quantity) in lootTable {
+            let baseName = formatItemName(itemID)
+            grouped[baseName, default: 0] += quantity
+        }
+        return grouped
+    }
+
+    private func lootSummaryText(_ groupedItems: [String: Int], limit: Int? = nil) -> String {
+        let sorted = groupedItems.sorted { $0.key < $1.key }
+        let itemsSlice: ArraySlice<(key: String, value: Int)>
+        if let limit = limit { itemsSlice = sorted.prefix(limit) } else { itemsSlice = sorted[sorted.startIndex..<sorted.endIndex] }
+        var parts = itemsSlice.map { "\($0.value)x \($0.key)" }
+        if let limit = limit, sorted.count > limit { parts.append("+\(sorted.count - limit) more") }
+        return parts.joined(separator: ", ")
     }
     
     private func roleColor(for role: GuildMember.Role) -> Color {
@@ -2732,12 +2756,12 @@ struct ExpeditionDetailView: View {
                             Spacer()
                         }
                         
-                        ForEach(Array(expedition.lootTable), id: \.key) { item in
-                            HStack {
-                                Label("\(item.value)x \(formatItemName(item.key))", systemImage: "bag.fill")
-                                    .foregroundColor(.green)
-                                Spacer()
-                            }
+                        // Single bag icon with summarized items
+                        let groupedItems = groupedRewards(expedition.lootTable)
+                        HStack {
+                            Label(lootSummaryText(groupedItems), systemImage: "bag.fill")
+                                .foregroundColor(.green)
+                            Spacer()
                         }
                     }
                     .padding()
@@ -2772,6 +2796,24 @@ struct ExpeditionDetailView: View {
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
         return name
+    }
+    
+    private func groupedRewards(_ lootTable: [String: Int]) -> [String: Int] {
+        var grouped: [String: Int] = [:]
+        for (itemID, quantity) in lootTable {
+            let baseName = formatItemName(itemID)
+            grouped[baseName, default: 0] += quantity
+        }
+        return grouped
+    }
+
+    private func lootSummaryText(_ groupedItems: [String: Int], limit: Int? = nil) -> String {
+        let sorted = groupedItems.sorted { $0.key < $1.key }
+        let itemsSlice: ArraySlice<(key: String, value: Int)>
+        if let limit = limit { itemsSlice = sorted.prefix(limit) } else { itemsSlice = sorted[sorted.startIndex..<sorted.endIndex] }
+        var parts = itemsSlice.map { "\($0.value)x \($0.key)" }
+        if let limit = limit, sorted.count > limit { parts.append("+\(sorted.count - limit) more") }
+        return parts.joined(separator: ", ")
     }
     
     private func roleIcon(for role: GuildMember.Role) -> String {
