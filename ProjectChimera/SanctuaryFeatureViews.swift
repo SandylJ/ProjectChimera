@@ -252,7 +252,7 @@ struct GuildHallView: View {
     @State private var showMemberList: Bool = false
 
     private var guild: Guild? { user.guild }
-    private var members: [GuildMember] { user.guildMembers ?? [] }
+    private var members: [GuildMember] { (user.guildMembers ?? []).filter { $0.role.isGathererRole } }
     private var activeExpeditions: [ActiveExpedition] { user.activeExpeditions ?? [] }
     private var activeBounties: [GuildBounty] { (user.guildBounties ?? []).filter { $0.isActive } }
 
@@ -281,10 +281,16 @@ struct GuildHallView: View {
                 // Automations
                 automationSection
 
+                // Gathering Expeditions Overview
+                gatheringExpeditionsSection
+
+                // Bounties Overview (non-combat focused shown here)
+                bountiesOverviewSection
+
                 // Members Summary (clean UI)
                 Section {
                     HStack {
-                        Text("Your Guild Members").font(.title2).bold()
+                        Text("Your Guild Gatherers").font(.title2).bold()
                         Spacer()
                         Button(action: { showMemberList.toggle() }) {
                             HStack(spacing: 6) {
@@ -297,7 +303,7 @@ struct GuildHallView: View {
                     .padding(.horizontal)
 
                     if members.isEmpty {
-                        Text("No members yet. Hire someone from the Guild Master!")
+                        Text("No gatherers yet. Hire someone from the Guild Hall!")
                             .foregroundColor(.secondary)
                             .padding(.horizontal)
                     } else {
@@ -322,9 +328,9 @@ struct GuildHallView: View {
 
                 // Hiring
                 Section {
-                    Text("Hire More").font(.title2).bold().padding(.horizontal)
+                    Text("Hire More Gatherers").font(.title2).bold().padding(.horizontal)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16)], spacing: 16) {
-                        ForEach(GuildMember.Role.allCases, id: \.self) { role in
+                        ForEach(GuildMember.Role.allCases.filter { $0.isGathererRole }, id: \.self) { role in
                             HireableMemberCardView(role: role, user: user)
                         }
                     }.padding(.top, 8)
@@ -344,14 +350,37 @@ struct GuildHallView: View {
 
     private var dashboardGrid: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
-            statCard(title: "Members", value: "\(members.count)", icon: "person.3.fill", tint: .blue)
-            statCard(title: "Expeditions", value: "\(activeExpeditions.count)", icon: "map.fill", tint: .green)
+            statCard(title: "Gatherers", value: "\(members.count)", icon: "person.3.fill", tint: .blue)
+            statCard(title: "Gathering Expeditions", value: "\(activeExpeditions.count)", icon: "map.fill", tint: .green)
             statCard(title: "Bounties", value: "\(activeBounties.count)", icon: "scroll.fill", tint: .orange)
             statCard(title: "Garden Ready", value: "\(readyToHarvestCount)", icon: "leaf.fill", tint: .green)
             let eps = String(format: "%.2f/s", IdleGameManager.shared.totalEchoesPerSecond(for: user))
             statCard(title: "Echoes", value: eps, icon: "flame.fill", tint: .purple)
         }
         .padding(.horizontal)
+    }
+
+    private var gatheringExpeditionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Gathering Expeditions").font(.title2).bold().padding(.horizontal)
+            AvailableExpeditionsGrid(user: user, mode: .gathering)
+        }
+    }
+
+    private var bountiesOverviewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Bounties Overview").font(.title2).bold().padding(.horizontal)
+            if activeBounties.isEmpty {
+                Text("No active bounties.").font(.caption).foregroundColor(.secondary).padding(.horizontal)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(activeBounties) { bounty in
+                        GuildBountySummaryCard(bounty: bounty)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
     }
 
     private func statCard(title: String, value: String, icon: String, tint: Color) -> some View {
@@ -446,6 +475,46 @@ struct GuildHallView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
+
+// MARK: - Compact Bounty Card for Hall
+struct GuildBountySummaryCard: View {
+    let bounty: GuildBounty
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "scroll.fill").foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(bounty.title).font(.headline)
+                Text(bounty.bountyDescription).font(.caption).foregroundColor(.secondary).lineLimit(2)
+                ProgressView(value: Double(bounty.currentProgress), total: Double(bounty.requiredProgress))
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                Label("\(bounty.guildXpReward) XP", systemImage: "star.fill").font(.caption).foregroundColor(.yellow)
+                Label("\(bounty.guildSealReward) Seals", systemImage: "seal.fill").font(.caption).foregroundColor(.orange)
+            }
+        }
+        .padding()
+        .background(Material.regular)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: - Expeditions Grid (reuses GM filtering)
+struct AvailableExpeditionsGrid: View {
+    let user: User
+    let mode: ExpeditionMode
+    var body: some View {
+        AvailableExpeditionsSection(availableMembers: (user.guildMembers ?? []).filter { member in
+            guard !member.isOnExpedition else { return false }
+            switch mode {
+            case .combat: return member.isCombatant
+            case .gathering: return member.role.isGathererRole
+            case .all: return true
+            }
+        }, mode: mode) { _ in }
+    }
+}
+
 
 struct GuildMemberRowView: View {
     @Environment(\.modelContext) private var modelContext

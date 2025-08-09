@@ -43,8 +43,8 @@ struct GuildMasterView: View {
                     }
                     .tabViewStyle(.automatic)
                 }
-                .navigationTitle("Guild Hall")
-                .navigationTitle("Guild Hall")
+                .navigationTitle("Guild Master")
+                .navigationTitle("Guild Master")
                 .background(guildHallBackground)
             }
         }
@@ -135,7 +135,7 @@ struct LoadingView: View {
             ProgressView()
                 .scaleEffect(1.5)
             
-            Text("Loading Guild Hall...")
+            Text("Loading Guild Master...")
                 .font(.headline)
                 .foregroundColor(.secondary)
         }
@@ -1350,7 +1350,7 @@ struct GuildMembersTab: View {
                 HireMembersSection(user: user, modelContext: modelContext)
                 
                 // Current Members (Grouped by Role)
-                GroupedMembersSection(guildMembers: guildMembers, user: user, modelContext: modelContext)
+                GroupedMembersSection(guildMembers: guildMembers.filter { $0.isCombatant }, user: user, modelContext: modelContext)
             }
             .padding()
         }
@@ -1363,21 +1363,21 @@ struct GroupedMembersSection: View {
     let modelContext: ModelContext
     
     private var groupedMembers: [GuildMember.Role: [GuildMember]] {
-        Dictionary(grouping: guildMembers) { $0.role }
+        Dictionary(grouping: guildMembers.filter { $0.isCombatant }) { $0.role }
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Guild Members (\(guildMembers.count))")
+            Text("Guild Members (\(guildMembers.filter { $0.isCombatant }.count))")
                 .font(.headline)
             
-            if guildMembers.isEmpty {
+            if guildMembers.filter({ $0.isCombatant }).isEmpty {
                 Text("No members yet. Hire some to get started!")
                     .foregroundColor(.secondary)
                     .italic()
             } else {
                 LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
-                    ForEach(GuildMember.Role.allCases, id: \.self) { role in
+                    ForEach(GuildMember.Role.allCases.filter { $0.isCombatantRole }, id: \.self) { role in
                         if let members = groupedMembers[role], !members.isEmpty {
                             RoleGroupCard(
                                 role: role,
@@ -1579,7 +1579,7 @@ struct HireMembersSection: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                ForEach(GuildMember.Role.allCases, id: \.self) { role in
+                ForEach(GuildMember.Role.allCases.filter { $0.isCombatantRole }, id: \.self) { role in
                     HireMemberCard(role: role, user: user, modelContext: modelContext)
                 }
             }
@@ -2111,7 +2111,7 @@ struct GuildExpeditionsTab: View {
     private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     
     private var availableMembers: [GuildMember] {
-        (user.guildMembers ?? []).filter { !$0.isOnExpedition }
+        (user.guildMembers ?? []).filter { !$0.isOnExpedition && $0.isCombatant }
     }
     
     private var activeExpeditions: [ActiveExpedition] {
@@ -2136,6 +2136,7 @@ struct GuildExpeditionsTab: View {
                 // Available Expeditions Section
                 AvailableExpeditionsSection(
                     availableMembers: availableMembers,
+                    mode: .combat,
                     onExpeditionSelected: { expedition in
                         selectedExpedition = expedition
                         showingExpeditionDetails = true
@@ -2460,10 +2461,25 @@ struct ActiveExpeditionCard: View {
 // MARK: - Available Expeditions Section
 struct AvailableExpeditionsSection: View {
     let availableMembers: [GuildMember]
+    let mode: ExpeditionMode
     let onExpeditionSelected: (Expedition) -> Void
     
     private var expeditions: [Expedition] {
-        ItemDatabase.shared.getAllExpeditions()
+        let all = ItemDatabase.shared.getAllExpeditions()
+        switch mode {
+        case .all:
+            return all
+        case .combat:
+            return all.filter { expedition in
+                guard let req = expedition.requiredRoles else { return true }
+                return req.contains(where: { $0.isCombatantRole })
+            }
+        case .gathering:
+            return all.filter { expedition in
+                guard let req = expedition.requiredRoles else { return true }
+                return req.contains(where: { $0.isGathererRole })
+            }
+        }
     }
     
     var body: some View {
