@@ -2315,19 +2315,23 @@ struct ActiveExpeditionCard: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
-                ForEach(expeditionMembers, id: \.id) { member in
+                if let firstRole = expeditionMembers.first?.role {
                     HStack(spacing: 4) {
-                        Image(systemName: memberRoleIcon(for: member.role))
-                            .font(.caption)
-                            .foregroundColor(memberRoleColor(for: member.role))
-                        
-                        Text(member.name)
-                            .font(.caption)
+                        Image(systemName: memberRoleIcon(for: firstRole))
+                            .font(.caption2)
+                            .foregroundColor(memberRoleColor(for: firstRole))
+                        Text("×\(expeditionMembers.count)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(memberRoleColor(for: member.role).opacity(0.2))
+                    .background(memberRoleColor(for: firstRole).opacity(0.2))
                     .cornerRadius(4)
+                } else {
+                    Text("None")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
             
