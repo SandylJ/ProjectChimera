@@ -325,4 +325,114 @@ final class GuildManager: ObservableObject {
         default: return 1.0
         }
     }
+
+    // MARK: - Automation Processing (NEW)
+    func processAutomations(for user: User, context: ModelContext) {
+        let now = Date()
+        let last = user.lastAutomationRun ?? now
+        let deltaTime = now.timeIntervalSince(last)
+        guard deltaTime > 0 else { return }
+        user.lastAutomationRun = now
+
+        let settings = user.guildAutomation
+        if settings.autoHarvestGarden { autoHarvestGarden(for: user, context: context) }
+        if settings.autoPlantHabitSeeds { autoPlantHabitSeeds(for: user, context: context) }
+        if settings.foragerGatherForAltar { processForagerGathering(for: user, deltaTime: deltaTime, context: context) }
+    }
+
+    private func autoHarvestGarden(for user: User, context: ModelContext) {
+        let now = Date()
+        // Habit Seeds
+        for planted in (user.plantedHabitSeeds ?? []) {
+            if let seed = planted.seed, let growTime = seed.growTime, planted.plantedAt.addingTimeInterval(growTime) <= now {
+                SanctuaryManager.shared.harvest(plantedItem: planted, for: user, context: context)
+            }
+        }
+        // Crops
+        for planted in (user.plantedCrops ?? []) {
+            if let crop = planted.crop, let growTime = crop.growTime, planted.plantedAt.addingTimeInterval(growTime) <= now {
+                SanctuaryManager.shared.harvest(plantedItem: planted, for: user, context: context)
+            }
+        }
+        // Trees
+        for planted in (user.plantedTrees ?? []) {
+            if let tree = planted.tree, let growTime = tree.growTime, planted.plantedAt.addingTimeInterval(growTime) <= now {
+                SanctuaryManager.shared.harvest(plantedItem: planted, for: user, context: context)
+            }
+        }
+    }
+
+    private func autoPlantHabitSeeds(for user: User, context: ModelContext) {
+        // Respect a max of 6 plots like the main view
+        let maxPlots = user.guildAutomation.gardenerMaintainPlots
+        let currentCount = (user.plantedHabitSeeds ?? []).count
+        guard currentCount < maxPlots else { return }
+
+        // Determine which seed to plant
+        let preferredID = user.guildAutomation.preferredHabitSeedID
+        var seedInventoryItems: [InventoryItem] = (user.inventory ?? []).filter { inv in
+            guard let item = ItemDatabase.shared.getItem(id: inv.itemID) else { return false }
+            return item.plantableType == .habitSeed && inv.quantity > 0
+        }
+        guard !seedInventoryItems.isEmpty else { return }
+
+        // If a preferred seed is set and available, prioritize it
+        if let preferredID = preferredID, let idx = seedInventoryItems.firstIndex(where: { $0.itemID == preferredID }) {
+            let preferred = seedInventoryItems.remove(at: idx)
+            seedInventoryItems.insert(preferred, at: 0)
+        }
+
+        // Plant until reaching the target plots or running out of seeds
+        var plotsToFill = maxPlots - currentCount
+        for inv in seedInventoryItems {
+            guard plotsToFill > 0 else { break }
+            let toPlant = min(inv.quantity, plotsToFill)
+            for _ in 0..<toPlant {
+                SanctuaryManager.shared.plantItem(itemID: inv.itemID, for: user, context: context)
+                plotsToFill -= 1
+                if plotsToFill == 0 { break }
+            }
+        }
+    }
+
+    private func processForagerGathering(for user: User, deltaTime: TimeInterval, context: ModelContext) {
+        // For each Forager, accumulate progress toward finding an item
+        let foragers = (user.guildMembers ?? []).filter { $0.role == .forager }
+        guard !foragers.isEmpty else { return }
+
+        let itemsPerSecond = foragers.reduce(0.0) { partial, member in
+            let interval = max(60.0, 3600.0 / Double(max(1, member.level))) // clamp to avoid too-fast at low levels
+            return partial + (1.0 / interval)
+        }
+
+        user.automationProgressForager += itemsPerSecond * deltaTime
+        let itemsToAward = Int(user.automationProgressForager)
+        user.automationProgressForager -= Double(itemsToAward)
+        guard itemsToAward > 0 else { return }
+
+        for _ in 0..<itemsToAward {
+            if let rewardID = pickForagerRewardItemID() {
+                addItemToInventory(itemID: rewardID, quantity: 1, for: user)
+            } else {
+                user.gold += 5
+            }
+        }
+    }
+
+    private func pickForagerRewardItemID() -> String? {
+        // Prefer materials that exist in DB; fall back to a plantable seed
+        let candidateIDs = [
+            "material_essence",
+            "material_joyful_ember",
+            "material_sunstone_shard",
+            "material_dream_shard",
+            "material_glowcap_spore",
+            "material_ironwood_bark"
+        ]
+        let valid = candidateIDs.filter { ItemDatabase.shared.getItem(id: $0) != nil }
+        if let id = valid.randomElement() { return id }
+        // fallback: any plantable
+        if let anySeed = ItemDatabase.shared.getAllPlantables().first?.id { return anySeed }
+        return nil
+    }
 }

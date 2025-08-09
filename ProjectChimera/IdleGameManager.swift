@@ -81,9 +81,11 @@ final class IdleGameManager: ObservableObject {
     func totalEchoesPerSecond(for user: User) -> Double {
         guard let altar = user.altarOfWhispers else { return 0.0 }
 
-        let seerBonus = user.guildMembers?
+        // Only apply Seer bonus if assigned to attune altar via automation settings
+        let seerBonusActive = user.guildAutomation.seerAttuneAltar
+        let seerBonus = seerBonusActive ? (user.guildMembers?
             .filter { $0.role == .seer }
-            .reduce(0.0) { $0 + (Double($1.level) * 0.1) } ?? 0.0
+            .reduce(0.0) { $0 + (Double($1.level) * 0.1) } ?? 0.0) : 0.0
 
         return altar.echoesPerSecond * (1.0 + seerBonus)
     }

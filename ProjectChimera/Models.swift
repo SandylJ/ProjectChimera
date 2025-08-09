@@ -199,6 +199,14 @@ final class User {
     var eggs: [HatchableEgg]? = []
     var activeHunts: [ActiveHunt]? = []
 
+    // --- NEW: Guild Automation ---
+    private var guildAutomationData: Data = Data()
+    var guildAutomation: GuildAutomationSettings {
+        get { (try? JSONDecoder().decode(GuildAutomationSettings.self, from: guildAutomationData)) ?? GuildAutomationSettings.defaultSettings }
+        set { guildAutomationData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+    var automationProgressForager: Double = 0.0
+    var lastAutomationRun: Date? = nil
 
     init(username: String) {
         self.id = UUID(); self.username = username; self.joinDate = .now; self.level = 1
@@ -218,6 +226,10 @@ final class User {
         self.activeHunts = []
         self.huntKillTally = [:]
         self.unclaimedHuntGold = 0
+        // Initialize automation
+        self.guildAutomation = GuildAutomationSettings.defaultSettings
+        self.automationProgressForager = 0.0
+        self.lastAutomationRun = nil
     }
 
     /// Some legacy code still expects a `name` property on `User`.
@@ -226,6 +238,25 @@ final class User {
         get { username }
         set { username = newValue }
     }
+}
+
+// --- NEW: Automation Settings Model ---
+struct GuildAutomationSettings: Codable {
+    var autoHarvestGarden: Bool
+    var autoPlantHabitSeeds: Bool
+    var preferredHabitSeedID: String?
+    var gardenerMaintainPlots: Int
+    var foragerGatherForAltar: Bool
+    var seerAttuneAltar: Bool
+
+    static let defaultSettings = GuildAutomationSettings(
+        autoHarvestGarden: true,
+        autoPlantHabitSeeds: false,
+        preferredHabitSeedID: nil,
+        gardenerMaintainPlots: 6,
+        foragerGatherForAltar: false,
+        seerAttuneAltar: true
+    )
 }
 
 
