@@ -208,6 +208,15 @@ final class User {
     var automationProgressForager: Double = 0.0
     var lastAutomationRun: Date? = nil
 
+    // --- NEW: Aggregated Guild Work Stats ---
+    var totalSeedsPlantedByGuild: Int = 0
+    var totalCropsPlantedByGuild: Int = 0
+    var totalTreesPlantedByGuild: Int = 0
+    var totalSeedsHarvestedByGuild: Int = 0
+    var totalCropsHarvestedByGuild: Int = 0
+    var totalTreesHarvestedByGuild: Int = 0
+    var totalItemsFoundByGuild: Int = 0
+
     init(username: String) {
         self.id = UUID(); self.username = username; self.joinDate = .now; self.level = 1
         self.totalXP = 0; self.currency = 100; self.xpStrength = 0; self.levelStrength = 1
@@ -218,18 +227,19 @@ final class User {
         self.plantedCrops = []; self.plantedTrees = []; self.guildMembers = []
         self.activeExpeditions = []; self.willpower = 0; self.statues = []; self.quests = []
         self.runes = 5; self.isDoubleXpNextTask = false; self.unlockedSpellIDs = []; self.activeBuffs = [:]
-        self.altarOfWhispers = nil
-        self.guild = nil
-        self.team = nil
-        self.guildSeals = 0
-        self.teamPoints = 0
-        self.activeHunts = []
-        self.huntKillTally = [:]
         self.unclaimedHuntGold = 0
         // Initialize automation
         self.guildAutomation = GuildAutomationSettings.defaultSettings
         self.automationProgressForager = 0.0
         self.lastAutomationRun = nil
+        // Initialize aggregated guild work stats
+        self.totalSeedsPlantedByGuild = 0
+        self.totalCropsPlantedByGuild = 0
+        self.totalTreesPlantedByGuild = 0
+        self.totalSeedsHarvestedByGuild = 0
+        self.totalCropsHarvestedByGuild = 0
+        self.totalTreesHarvestedByGuild = 0
+        self.totalItemsFoundByGuild = 0
     }
 
     /// Some legacy code still expects a `name` property on `User`.

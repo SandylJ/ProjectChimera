@@ -32,12 +32,15 @@ final class SanctuaryManager: ObservableObject {
         case .habitSeed:
             let newPlantedSeed = PlantedHabitSeed(seedID: itemID, plantedAt: actualPlantedAt, owner: user)
             user.plantedHabitSeeds?.append(newPlantedSeed)
+            user.totalSeedsPlantedByGuild += 1
         case .crop:
             let newPlantedCrop = PlantedCrop(cropID: itemID, plantedAt: actualPlantedAt, owner: user)
             user.plantedCrops?.append(newPlantedCrop)
+            user.totalCropsPlantedByGuild += 1
         case .treeSapling:
             let newPlantedTree = PlantedTree(treeID: itemID, plantedAt: actualPlantedAt, owner: user)
             user.plantedTrees?.append(newPlantedTree)
+            user.totalTreesPlantedByGuild += 1
         }
     }
 
@@ -47,10 +50,13 @@ final class SanctuaryManager: ObservableObject {
         // Determine the reward based on the type of item harvested
         if let seed = plantedItem as? PlantedHabitSeed {
             reward = seed.seed?.harvestReward
+            user.totalSeedsHarvestedByGuild += 1
         } else if let crop = plantedItem as? PlantedCrop {
             reward = crop.crop?.harvestReward
+            user.totalCropsHarvestedByGuild += 1
         } else if let tree = plantedItem as? PlantedTree {
             reward = tree.tree?.harvestReward
+            user.totalTreesHarvestedByGuild += 1
         }
         
         // Grant the reward

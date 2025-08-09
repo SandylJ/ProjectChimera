@@ -413,6 +413,7 @@ final class GuildManager: ObservableObject {
         for _ in 0..<itemsToAward {
             if let rewardID = pickForagerRewardItemID() {
                 addItemToInventory(itemID: rewardID, quantity: 1, for: user)
+                user.totalItemsFoundByGuild += 1
             } else {
                 user.gold += 5
             }
