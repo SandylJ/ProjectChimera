@@ -427,7 +427,7 @@ struct ActiveHuntsCard: View {
     let modelContext: ModelContext
     @State private var showingHuntDetails = false
     @State private var selectedHunt: ActiveHunt?
-    @State private var showingUpgradeMenu = false
+    @State private var showingStartMenu = false
     @State private var now = Date()
     
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
@@ -440,11 +440,13 @@ struct ActiveHuntsCard: View {
     }
     
     private var totalKillsPerHour: Int {
-        return Int(totalDPS / 10.0 * 3600) // Convert DPS to kills per hour
+        return Int(totalDPS / 10.0 * 3600)
     }
     
     private var totalGoldPerHour: Int {
-        return totalKillsPerHour * 5 // Base 5 gold per kill
+        // Use adjusted gold per kill average (assume goblin as baseline for header)
+        let perKill = GuildManager.shared.adjustedGoldPerKill(for: "enemy_goblin")
+        return totalKillsPerHour * perKill
     }
     
     var body: some View {
@@ -452,10 +454,10 @@ struct ActiveHuntsCard: View {
             // Header with stats
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Passive Hunting")
+                    Text("Active Hunts")
                         .font(.headline)
                     
-                    Text("\(user.activeHunts?.count ?? 0) active hunts")
+                    Text("\(user.activeHunts?.count ?? 0) running")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -483,9 +485,6 @@ struct ActiveHuntsCard: View {
             // Active hunts
             if let activeHunts = user.activeHunts, !activeHunts.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Active Hunts")
-                        .font(.subheadline.bold())
-                    
                     ForEach(activeHunts) { hunt in
                         EnhancedHuntProgressRow(
                             hunt: hunt,
@@ -505,15 +504,15 @@ struct ActiveHuntsCard: View {
             // Hunt management
             HStack {
                 Button("Start New Hunt") {
-                    showingUpgradeMenu = true
+                    showingStartMenu = true
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 
                 Spacer()
                 
-                Button("Upgrade Hunters") {
-                    showingUpgradeMenu = true
+                NavigationLink("Manage Hunters") {
+                    HuntUpgradeView(user: user, modelContext: modelContext)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -527,12 +526,11 @@ struct ActiveHuntsCard: View {
                 LiveHuntDetailView(hunt: hunt, user: user, modelContext: modelContext)
             }
         }
-        .sheet(isPresented: $showingUpgradeMenu) {
-            HuntUpgradeView(user: user, modelContext: modelContext)
+        .sheet(isPresented: $showingStartMenu) {
+            StartHuntView(user: user, modelContext: modelContext)
         }
         .onReceive(timer) { newDate in
             self.now = newDate
-            // Process hunts in real-time
             GuildManager.shared.processHunts(for: user, deltaTime: 0.5, context: modelContext)
         }
     }
@@ -675,17 +673,11 @@ struct EnhancedHuntProgressRow: View {
     }
     
     private var killsPerSecond: Double {
-        let members = hunt.memberIDs.compactMap { id in
-            user.guildMembers?.first { $0.id == id }
-        }
-        let totalDPS = members.reduce(0.0) { total, member in
-            total + member.combatDPS()
-        }
-        return totalDPS / 10.0 // Convert DPS to kills per second
+        GuildManager.shared.calculateHuntKillsPerSecond(hunt: hunt, user: user)
     }
     
     private var goldPerSecond: Double {
-        return killsPerSecond * 5 // Base 5 gold per kill
+        Double(GuildManager.shared.adjustedGoldPerKill(for: hunt.enemyID)) * killsPerSecond
     }
     
     private var timeSinceLastUpdate: TimeInterval {
@@ -813,11 +805,11 @@ struct LiveHuntDetailView: View {
     }
     
     private var killsPerSecond: Double {
-        return totalDPS / 10.0
+        GuildManager.shared.calculateHuntKillsPerSecond(hunt: hunt, user: user)
     }
     
     private var goldPerSecond: Double {
-        return killsPerSecond * 5
+        Double(GuildManager.shared.adjustedGoldPerKill(for: hunt.enemyID)) * killsPerSecond
     }
     
     private var timeSinceLastUpdate: TimeInterval {
@@ -3166,71 +3158,176 @@ struct GuildProjectsTab: View {
 struct StartHuntView: View {
     let user: User
     let modelContext: ModelContext
+    @Environment(\.dismiss) private var dismiss
     
-    private let availableEnemies = [
-        ("Goblin", "tortoise.fill", Color.green, "enemy_goblin", 1),
-        ("Zombie", "bandage.fill", Color.purple, "enemy_zombie", 2),
-        ("Spider", "ant.fill", Color.brown, "enemy_spider", 3),
-        ("Skeleton", "skull.fill", Color.gray, "enemy_skeleton", 4),
-        ("Ghost", "sparkles", Color.blue, "enemy_ghost", 5),
-        ("Dragon", "flame.fill", Color.red, "enemy_dragon", 10)
-    ]
+    @State private var selectedEnemyID: String? = nil
+    @State private var selectedMemberIDs: Set<UUID> = []
     
-    private var availableCombatants: [GuildMember] {
-        (user.guildMembers ?? []).filter { $0.isCombatant }
+    private var guildLevel: Int { user.guild?.level ?? 1 }
+    
+    private var availableEnemies: [(name: String, icon: String, color: Color, id: String, requiredGuildLevel: Int, blurb: String)] {
+        // Progressive unlocks by guild level
+        return [
+            ("Spider", "ant.fill", .brown, "enemy_spider", 1, "Skittish and venomous. Weak to precise strikes."),
+            ("Goblin", "tortoise.fill", .green, "enemy_goblin", 3, "Chaotic but fragile. Knights excel here."),
+            ("Zombie", "bandage.fill", .purple, "enemy_zombie", 5, "Undead resist blades. Magic devastates."),
+            ("Skeleton", "skull.fill", .gray, "enemy_skeleton", 7, "Bones shatter under blunt and magic."),
+            ("Wolf", "pawprint.fill", .teal, "enemy_wolf", 9, "Fast packs. Archers keep them at bay."),
+            ("Ghost", "sparkles", .blue, "enemy_ghost", 12, "Ethereal. Holy and arcane prevail."),
+            ("Dragon", "flame.fill", .red, "enemy_dragon", 18, "Apex foe. Requires elite force.")
+        ]
     }
     
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Available hunters
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Available Hunters")
-                        .font(.headline)
-                    
-                    if availableCombatants.isEmpty {
-                        Text("No combat-ready hunters available")
-                            .foregroundColor(.secondary)
-                            .italic()
-                    } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
-                            ForEach(availableCombatants, id: \.id) { member in
-                                HunterCard(member: member)
-                            }
-                        }
-                    }
-                }
-                
-                // Available enemies
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Available Targets")
-                        .font(.headline)
-                    
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 12) {
-                        ForEach(availableEnemies, id: \.0) { enemy in
-                            EnemyCard(
-                                name: enemy.0,
-                                icon: enemy.1,
-                                color: enemy.2,
-                                enemyID: enemy.3,
-                                difficulty: enemy.4,
-                                onStart: { startHunt(enemyID: enemy.3) }
-                            )
-                        }
-                    }
-                }
-            }
-            .padding()
+    private var eligibleEnemies: [ (name: String, icon: String, color: Color, id: String, requiredGuildLevel: Int, blurb: String) ] {
+        availableEnemies.filter { guildLevel >= $0.requiredGuildLevel }
+    }
+    
+    private var availableCombatants: [GuildMember] {
+        let used: Set<UUID> = Set((user.activeHunts ?? []).flatMap { $0.memberIDs })
+        return (user.guildMembers ?? []).filter { $0.isCombatant && !used.contains($0.id) }
+    }
+    
+    private var selectedMembers: [GuildMember] {
+        selectedMemberIDs.compactMap { id in
+            user.guildMembers?.first { $0.id == id }
         }
     }
     
-    private func startHunt(enemyID: String) {
-        let combatantIDs = availableCombatants.map { $0.id }
-        guard !combatantIDs.isEmpty else { return }
-        
-        let hunt = ActiveHunt(enemyID: enemyID, memberIDs: combatantIDs, owner: user)
+    private var previewKillsPerSecond: Double {
+        guard let enemyID = selectedEnemyID else { return 0 }
+        let tempHunt = ActiveHunt(enemyID: enemyID, memberIDs: Array(selectedMemberIDs), owner: user)
+        return GuildManager.shared.calculateHuntKillsPerSecond(hunt: tempHunt, user: user)
+    }
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Enemy selection with unlock gating and blurbs
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Choose Target")
+                            .font(.headline)
+                        
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 12) {
+                            ForEach(eligibleEnemies, id: \.id) { enemy in
+                                VStack(spacing: 8) {
+                                    Image(systemName: enemy.icon)
+                                        .font(.title2)
+                                        .foregroundColor(enemy.color)
+                                    Text(enemy.name).font(.subheadline.bold())
+                                    Text(enemy.blurb)
+                                        .font(.caption2)
+                                        .multilineTextAlignment(.center)
+                                        .foregroundColor(.secondary)
+                                    Button(selectedEnemyID == enemy.id ? "Selected" : "Select") {
+                                        selectedEnemyID = enemy.id
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Material.thin)
+                                .cornerRadius(8)
+                            }
+                        }
+                    }
+                    
+                    // Member selection
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Assign Hunters")
+                            .font(.headline)
+                        
+                        if availableCombatants.isEmpty {
+                            Text("No combat-ready hunters available")
+                                .foregroundColor(.secondary)
+                                .italic()
+                        } else {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 12) {
+                                ForEach(availableCombatants, id: \.id) { member in
+                                    let isSelected = selectedMemberIDs.contains(member.id)
+                                    Button {
+                                        if isSelected { selectedMemberIDs.remove(member.id) }
+                                        else { selectedMemberIDs.insert(member.id) }
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: iconName(for: member.role))
+                                                .foregroundColor(colorFor(role: member.role))
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(member.name).font(.subheadline.bold())
+                                                Text("\(member.role.rawValue) Lv.\(member.level)")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            Spacer()
+                                            if isSelected { Image(systemName: "checkmark.circle.fill").foregroundColor(.green) }
+                                        }
+                                        .padding()
+                                        .background(isSelected ? Color.green.opacity(0.15) : Material.thin)
+                                        .cornerRadius(8)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Preview stats
+                    if selectedEnemyID != nil && !selectedMemberIDs.isEmpty {
+                        VStack(spacing: 8) {
+                            Text("Estimated Output")
+                                .font(.headline)
+                            Text("\(Int(previewKillsPerSecond * 3600)) kills/hr • \(Int(previewKillsPerSecond * 3600) * GuildManager.shared.adjustedGoldPerKill(for: selectedEnemyID!)) gold/hr")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Material.regular)
+                        .cornerRadius(12)
+                    }
+                    
+                    Button("Start Hunt") { startHunt() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(selectedEnemyID == nil || selectedMemberIDs.isEmpty)
+                }
+                .padding()
+            }
+            .navigationTitle("New Hunt")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+    }
+    
+    private func startHunt() {
+        guard let enemyID = selectedEnemyID, !selectedMemberIDs.isEmpty else { return }
+        let hunt = ActiveHunt(enemyID: enemyID, memberIDs: Array(selectedMemberIDs), owner: user)
         modelContext.insert(hunt)
         user.activeHunts?.append(hunt)
+        dismiss()
+    }
+    
+    private func iconName(for role: GuildMember.Role) -> String {
+        switch role {
+        case .knight: return "shield.fill"
+        case .archer: return "arrow.up.right"
+        case .wizard: return "sparkles"
+        case .rogue: return "bolt.fill"
+        case .cleric: return "cross.fill"
+        default: return "person.fill"
+        }
+    }
+    private func colorFor(role: GuildMember.Role) -> Color {
+        switch role {
+        case .knight: return .blue
+        case .archer: return .gray
+        case .wizard: return .purple
+        case .rogue: return .orange
+        case .cleric: return .green
+        default: return .secondary
+        }
     }
 }
 

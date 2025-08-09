@@ -197,6 +197,7 @@ final class GuildManager: ObservableObject {
         user.guildBounties?.removeAll { $0.id == bounty.id }
     }
     
+    // MARK: - Passive Hunts Processing (toned-down loot + guild XP + enemy modifiers)
     func processHunts(for user: User, deltaTime: TimeInterval, context: ModelContext) {
         guard let activeHunts = user.activeHunts, !activeHunts.isEmpty else { return }
         
@@ -204,36 +205,107 @@ final class GuildManager: ObservableObject {
             let killsPerSecond = calculateHuntKillsPerSecond(hunt: hunt, user: user)
             let newKills = Int(killsPerSecond * deltaTime)
             
+            guard newKills > 0 else { continue }
+            
             hunt.killsAccumulated += newKills
             hunt.lastUpdated = .now
             
-            // Add gold to unclaimed pool
-            if let enemy = hunt.enemy {
-                user.unclaimedHuntGold += newKills * enemy.goldPerKill
-            } else {
-                // Default gold per kill if enemy data not available
-                user.unclaimedHuntGold += newKills * 5
-            }
+            // Track per-enemy kill tally
+            var tally = user.huntKillTally
+            tally[hunt.enemyID, default: 0] += newKills
+            user.huntKillTally = tally
             
-            // Generate item rewards based on kills
+            // Add gold to unclaimed pool (reduced by >50%)
+            let perKillGold = adjustedGoldPerKill(for: hunt.enemyID)
+            user.unclaimedHuntGold += newKills * perKillGold
+            
+            // Generate item rewards (reduced rates and quantities)
             generateHuntItemRewards(kills: newKills, enemyID: hunt.enemyID, for: user)
+            
+            // Add slow Guild XP progression
+            let xpGain = (newKills / 25) + Int(Double(newKills) * xpPerKill(for: hunt.enemyID))
+            if xpGain > 0 { addGuildXP(xpGain, for: user) }
         }
     }
     
-    private func calculateHuntKillsPerSecond(hunt: ActiveHunt, user: User) -> Double {
-        let totalDPS = hunt.memberIDs.compactMap { memberID in
+    // Exposed so UI can reflect the real-time KPS used by the engine
+    func calculateHuntKillsPerSecond(hunt: ActiveHunt, user: User) -> Double {
+        let members: [GuildMember] = hunt.memberIDs.compactMap { memberID in
             user.guildMembers?.first { $0.id == memberID }
-        }.reduce(0.0) { total, member in
-            total + member.combatDPS()
+        }
+        guard !members.isEmpty else { return 0.0 }
+        
+        let roleMultipliers = getEnemyRoleMultipliers(hunt.enemyID)
+        
+        // Cleric provides team-wide DPS multiplier (10% per level)
+        let clericLevelSum = members.filter { $0.role == .cleric }.reduce(0) { $0 + $1.level }
+        let clericBuff = 1.0 + 0.10 * Double(clericLevelSum)
+        
+        let baseTeamDPS = members.reduce(0.0) { total, member in
+            let memberBase = member.combatDPS()
+            let mult = roleMultipliers[member.role] ?? 1.0
+            return total + memberBase * mult
         }
         
+        let effectiveDPS = baseTeamDPS * clericBuff
+        
         // Convert DPS to kills per second (simplified)
-        return totalDPS / 10.0 // Assuming 10 DPS = 1 kill per second
+        return effectiveDPS / 10.0
+    }
+    
+    // Role multipliers per enemy to model strengths/weaknesses
+    func getEnemyRoleMultipliers(_ enemyID: String) -> [GuildMember.Role: Double] {
+        switch enemyID {
+        case "enemy_spider":
+            // Agile foes vulnerable to poisons and precise strikes
+            return [.rogue: 1.3, .wizard: 1.1, .archer: 1.0, .knight: 0.85, .cleric: 1.0]
+        case "enemy_wolf":
+            // Pack beasts; archers are effective at range
+            return [.archer: 1.2, .knight: 1.0, .rogue: 1.0, .wizard: 0.9, .cleric: 1.0]
+        case "enemy_goblin":
+            // Squishy tricksters; disciplined fronts and ranged focus help
+            return [.knight: 1.25, .archer: 1.15, .rogue: 1.0, .wizard: 1.0, .cleric: 1.0]
+        case "enemy_skeleton":
+            // Bones are weak to blunt force; arrows less effective
+            return [.knight: 1.3, .wizard: 1.15, .archer: 0.75, .rogue: 0.9, .cleric: 1.0]
+        case "enemy_zombie":
+            // Undead resist blades, weak to magic
+            return [.wizard: 1.6, .knight: 1.0, .archer: 0.9, .rogue: 0.5, .cleric: 1.05]
+        case "enemy_ghost":
+            // Ethereal; holy and arcane excel, physical falters
+            return [.cleric: 1.8, .wizard: 1.4, .knight: 0.7, .archer: 0.7, .rogue: 0.6]
+        case "enemy_dragon":
+            // Ancient might; favors disciplined ranged and arcane
+            return [.wizard: 1.3, .archer: 1.2, .knight: 1.0, .rogue: 0.8, .cleric: 1.0]
+        default:
+            return [:]
+        }
+    }
+    
+    // Gold per kill after global passive reduction (>50% reduction)
+    func adjustedGoldPerKill(for enemyID: String) -> Int {
+        let base = GameData.shared.getEnemy(id: enemyID)?.goldPerKill ?? 5
+        let adjusted = Int(round(Double(base) * 0.4))
+        return max(1, adjusted)
+    }
+    
+    // Slow guild XP per kill varies slightly by enemy difficulty
+    private func xpPerKill(for enemyID: String) -> Double {
+        switch enemyID {
+        case "enemy_spider": return 0.03
+        case "enemy_wolf": return 0.035
+        case "enemy_goblin": return 0.04
+        case "enemy_skeleton": return 0.05
+        case "enemy_zombie": return 0.06
+        case "enemy_ghost": return 0.08
+        case "enemy_dragon": return 0.2
+        default: return 0.04
+        }
     }
     
     private func generateHuntItemRewards(kills: Int, enemyID: String, for user: User) {
-        // Base chance for items (higher for more kills)
-        let baseChance = min(Double(kills) * 0.1, 0.8) // Max 80% chance
+        // Base chance for items (toned down): lower slope and cap
+        let baseChance = min(Double(kills) * 0.04, 0.35)
         
         // Different item pools for different enemies
         let itemPool = getItemPoolForEnemy(enemyID)
@@ -241,7 +313,9 @@ final class GuildManager: ObservableObject {
         for item in itemPool {
             let chance = baseChance * item.dropRate
             if Double.random(in: 0...1) < chance {
-                let quantity = Int.random(in: item.minQuantity...item.maxQuantity)
+                let rawQuantity = Int.random(in: item.minQuantity...item.maxQuantity)
+                // Reduce quantity by ~50%, at least 1
+                let quantity = max(1, Int(Double(rawQuantity) * 0.5))
                 addUnclaimedHuntItem(itemID: item.itemID, quantity: quantity, for: user)
             }
         }
