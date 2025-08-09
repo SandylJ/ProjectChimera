@@ -1979,7 +1979,7 @@ struct GuildBountiesTab: View {
                     .cornerRadius(12)
                 } else {
                     ForEach(activeBounties) { bounty in
-                        GuildBountyCard(bounty: bounty, user: user)
+                        EnhancedBountyCard(bounty: bounty, user: user)
                     }
                 }
             }

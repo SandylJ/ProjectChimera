@@ -250,9 +250,12 @@ struct GuildHallView: View {
     @Bindable var user: User
     @State private var timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     @State private var showMemberList: Bool = false
+    @State private var selectedExpedition: Expedition? = nil
+    @State private var showingExpeditionDetails: Bool = false
 
     private var guild: Guild? { user.guild }
     private var members: [GuildMember] { (user.guildMembers ?? []).filter { $0.role.isGathererRole } }
+    private var availableGatherers: [GuildMember] { (user.guildMembers ?? []).filter { $0.role.isGathererRole && !$0.isOnExpedition } }
     private var activeExpeditions: [ActiveExpedition] { user.activeExpeditions ?? [] }
     private var activeBounties: [GuildBounty] { (user.guildBounties ?? []).filter { $0.isActive } }
 
@@ -277,6 +280,19 @@ struct GuildHallView: View {
 
                 // Quick Stats Grid
                 dashboardGrid
+
+                // Quick actions row
+                if readyToHarvestCount > 0 {
+                    HStack(spacing: 12) {
+                        Button("Harvest All Ready (\(readyToHarvestCount))") { harvestAllReady() }
+                            .buttonStyle(.borderedProminent).tint(.green)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                }
+
+                // Live Gathering
+                liveGatheringSection
 
                 // Automations
                 automationSection
@@ -303,9 +319,13 @@ struct GuildHallView: View {
                     .padding(.horizontal)
 
                     if members.isEmpty {
-                        Text("No gatherers yet. Hire someone from the Guild Hall!")
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
+                        VStack(spacing: 8) {
+                            Text("No gatherers yet. Kickstart operations to get going!")
+                                .foregroundColor(.secondary)
+                            Button("Kickstart Gathering") { quickstartGathering() }
+                                .buttonStyle(.borderedProminent).tint(.blue)
+                        }
+                        .padding(.horizontal)
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
                             statCard(title: "Seeds Planted", value: "\(user.totalSeedsPlantedByGuild + user.totalCropsPlantedByGuild)", icon: "leaf.fill", tint: .green)
@@ -335,6 +355,12 @@ struct GuildHallView: View {
                         }
                     }.padding(.top, 8)
                 }
+
+                // Claim unclaimed hunt rewards (reuse existing component)
+                if user.unclaimedHuntGold > 0 || !user.unclaimedHuntItems.isEmpty {
+                    UnclaimedRewardsSection(user: user, modelContext: modelContext)
+                        .padding(.horizontal)
+                }
             }
             .padding(.vertical)
         }
@@ -345,6 +371,23 @@ struct GuildHallView: View {
         .onReceive(timer) { _ in
             GuildManager.shared.checkCompletedExpeditions(for: user, context: modelContext)
             GuildManager.shared.processAutomations(for: user, context: modelContext)
+        }
+        .sheet(isPresented: $showingExpeditionDetails) {
+            if let expedition = selectedExpedition {
+                ExpeditionDetailView(
+                    expedition: expedition,
+                    availableMembers: availableGatherers,
+                    onLaunch: { selectedIDs in
+                        GuildManager.shared.launchExpedition(
+                            expeditionID: expedition.id,
+                            with: Array(selectedIDs),
+                            for: user,
+                            context: modelContext
+                        )
+                        showingExpeditionDetails = false
+                    }
+                )
+            }
         }
     }
 
@@ -363,7 +406,18 @@ struct GuildHallView: View {
     private var gatheringExpeditionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Gathering Expeditions").font(.title2).bold().padding(.horizontal)
-            AvailableExpeditionsGrid(user: user, mode: .gathering)
+            AvailableExpeditionsGrid(user: user, mode: .gathering) { expedition in
+                selectedExpedition = expedition
+                showingExpeditionDetails = true
+            }
+            if !activeExpeditions.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Active Expeditions").font(.headline).padding(.horizontal)
+                    ForEach(activeExpeditions) { act in
+                        ActiveExpeditionCardView(activeExpedition: act)
+                    }
+                }
+            }
         }
     }
 
@@ -375,7 +429,7 @@ struct GuildHallView: View {
             } else {
                 VStack(spacing: 12) {
                     ForEach(activeBounties) { bounty in
-                        GuildBountySummaryCard(bounty: bounty)
+                        EnhancedBountyCard(bounty: bounty, user: user)
                     }
                 }
                 .padding(.horizontal)
@@ -474,6 +528,80 @@ struct GuildHallView: View {
         .background(Material.regular)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
+
+    private var liveGatheringSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Live Gathering").font(.title2).bold().padding(.horizontal)
+            HStack(spacing: 12) {
+                // Forager live progress
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "bag.fill").foregroundColor(.brown)
+                        Text("Foragers")
+                            .font(.headline)
+                    }
+                    ProgressView(value: min(user.automationProgressForager, 1.0))
+                        .progressViewStyle(LinearProgressViewStyle(tint: .brown))
+                    Text("Progress to next find")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Material.regular)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private func harvestAllReady() {
+        let now = Date()
+        // Habit Seeds
+        for planted in (user.plantedHabitSeeds ?? []) {
+            if let seed = planted.seed, let growTime = seed.growTime, planted.plantedAt.addingTimeInterval(growTime) <= now {
+                SanctuaryManager.shared.harvest(plantedItem: planted, for: user, context: modelContext)
+            }
+        }
+        // Crops
+        for planted in (user.plantedCrops ?? []) {
+            if let crop = planted.crop, let growTime = crop.growTime, planted.plantedAt.addingTimeInterval(growTime) <= now {
+                SanctuaryManager.shared.harvest(plantedItem: planted, for: user, context: modelContext)
+            }
+        }
+        // Trees
+        for planted in (user.plantedTrees ?? []) {
+            if let tree = planted.tree, let growTime = tree.growTime, planted.plantedAt.addingTimeInterval(growTime) <= now {
+                SanctuaryManager.shared.harvest(plantedItem: planted, for: user, context: modelContext)
+            }
+        }
+    }
+
+    private func quickstartGathering() {
+        // Ensure some gold for hiring
+        if user.gold < 600 { user.gold = 600 }
+        // Hire a Forager and a Gardener if missing
+        if !(user.guildMembers ?? []).contains(where: { $0.role == .forager }) {
+            _ = GuildManager.shared.hireGuildMember(role: .forager, for: user, context: modelContext)
+        }
+        if !(user.guildMembers ?? []).contains(where: { $0.role == .gardener }) {
+            _ = GuildManager.shared.hireGuildMember(role: .gardener, for: user, context: modelContext)
+        }
+        // Seed some inventory
+        func addItem(_ id: String, qty: Int) {
+            if let existing = user.inventory?.first(where: { $0.itemID == id }) { existing.quantity += qty }
+            else { user.inventory?.append(InventoryItem(itemID: id, quantity: qty, owner: user)) }
+        }
+        addItem("seed_vigor", 3)
+        addItem("seed_serenity", 2)
+        addItem("crop_sunwheat", 2)
+        // Plant up to 3 plots
+        let plantIDs = ["seed_vigor", "seed_serenity", "crop_sunwheat"]
+        for pid in plantIDs {
+            SanctuaryManager.shared.plantItem(itemID: pid, for: user, context: modelContext)
+        }
+    }
 }
 
 // MARK: - Compact Bounty Card for Hall
@@ -503,6 +631,7 @@ struct GuildBountySummaryCard: View {
 struct AvailableExpeditionsGrid: View {
     let user: User
     let mode: ExpeditionMode
+    let onSelect: (Expedition) -> Void
     var body: some View {
         AvailableExpeditionsSection(availableMembers: (user.guildMembers ?? []).filter { member in
             guard !member.isOnExpedition else { return false }
@@ -511,7 +640,7 @@ struct AvailableExpeditionsGrid: View {
             case .gathering: return member.role.isGathererRole
             case .all: return true
             }
-        }, mode: mode) { _ in }
+        }, mode: mode) { expedition in onSelect(expedition) }
     }
 }
 
@@ -621,5 +750,56 @@ struct ActiveExpeditionCardView: View {
         formatter.allowedUnits = [.hour, .minute, .second]
         formatter.unitsStyle = .abbreviated
         return formatter.string(from: remaining) ?? "..."
+    }
+}
+
+struct EnhancedBountyCard: View {
+    @Environment(\.modelContext) private var modelContext
+    @Bindable var bounty: GuildBounty
+    @Bindable var user: User
+
+    private var isComplete: Bool { bounty.currentProgress >= bounty.requiredProgress }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "scroll.fill").foregroundColor(.orange)
+                VStack(alignment: .leading) {
+                    Text(bounty.title).font(.headline)
+                    Text(bounty.bountyDescription).font(.caption).foregroundColor(.secondary).lineLimit(2)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    Label("\(bounty.guildXpReward) XP", systemImage: "star.fill").font(.caption).foregroundColor(.yellow)
+                    Label("\(bounty.guildSealReward) Seals", systemImage: "seal.fill").font(.caption).foregroundColor(.orange)
+                }
+            }
+            ProgressView(value: Double(bounty.currentProgress), total: Double(bounty.requiredProgress))
+                .tint(isComplete ? .green : .blue)
+
+            HStack(spacing: 8) {
+                if !isComplete {
+                    Button("Work +1") { bounty.currentProgress = min(bounty.currentProgress + 1, bounty.requiredProgress) }
+                        .buttonStyle(.bordered)
+                    if let target = bounty.targetEnemyID {
+                        Text("Target: \(target.replacingOccurrences(of: "enemy_", with: "").capitalized)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button("Track") { /* No-op for now; could set a tracking state */ }
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("Turn In") {
+                        GuildManager.shared.completeBounty(bounty: bounty, for: user)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                }
+            }
+        }
+        .padding()
+        .background(Material.regular)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
