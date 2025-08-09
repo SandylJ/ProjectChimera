@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 // MARK: - Main Habit Garden View
 // FIXED: Added 'public' so this view can be accessed from SanctuaryView
@@ -247,25 +248,53 @@ struct RewardDescriptionView: View {
 struct GuildHallView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var user: User
-    
+    @State private var timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+
+    private var guild: Guild? { user.guild }
+    private var members: [GuildMember] { user.guildMembers ?? [] }
+    private var activeExpeditions: [ActiveExpedition] { user.activeExpeditions ?? [] }
+    private var activeBounties: [GuildBounty] { (user.guildBounties ?? []).filter { $0.isActive } }
+
+    private var plantedCounts: (seeds: Int, crops: Int, trees: Int) {
+        (user.plantedHabitSeeds?.count ?? 0, user.plantedCrops?.count ?? 0, user.plantedTrees?.count ?? 0)
+    }
+
+    private var readyToHarvestCount: Int {
+        let now = Date()
+        let seedReady = (user.plantedHabitSeeds ?? []).filter { p in if let s = p.seed, let t = s.growTime { return p.plantedAt.addingTimeInterval(t) <= now } else { return false } }.count
+        let cropReady = (user.plantedCrops ?? []).filter { p in if let s = p.crop, let t = s.growTime { return p.plantedAt.addingTimeInterval(t) <= now } else { return false } }.count
+        let treeReady = (user.plantedTrees ?? []).filter { p in if let s = p.tree, let t = s.growTime { return p.plantedAt.addingTimeInterval(t) <= now } else { return false } }.count
+        return seedReady + cropReady + treeReady
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                // Header
                 Text("Guild Hall").font(.largeTitle).bold().padding(.horizontal)
-                
+                GuildHeaderView(guild: guild, user: user)
+
+                // Quick Stats Grid
+                dashboardGrid
+
+                // Automations
+                automationSection
+
+                // Members
                 Section {
                     Text("Your Guild Members").font(.title2).bold().padding(.horizontal)
-                    if (user.guildMembers ?? []).isEmpty {
+                    if members.isEmpty {
                         Text("No members yet. Hire someone from the Guild Master!")
                             .foregroundColor(.secondary)
                             .padding(.horizontal)
                     } else {
-                        ForEach(user.guildMembers ?? []) { member in
+                        ForEach(members) { member in
                             GuildMemberRowView(member: member, user: user)
                         }
                     }
                 }
-                
+
+                // Hiring
                 Section {
                     Text("Hire More").font(.title2).bold().padding(.horizontal)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16)], spacing: 16) {
@@ -278,6 +307,117 @@ struct GuildHallView: View {
             .padding(.vertical)
         }
         .navigationTitle("Guild Hall")
+        .onAppear {
+            if user.guild == nil { GuildManager.shared.initializeGuild(for: user, context: modelContext) }
+        }
+        .onReceive(timer) { _ in
+            GuildManager.shared.checkCompletedExpeditions(for: user, context: modelContext)
+            GuildManager.shared.processAutomations(for: user, context: modelContext)
+        }
+    }
+
+    private var dashboardGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
+            statCard(title: "Members", value: "\(members.count)", icon: "person.3.fill", tint: .blue)
+            statCard(title: "Expeditions", value: "\(activeExpeditions.count)", icon: "map.fill", tint: .green)
+            statCard(title: "Bounties", value: "\(activeBounties.count)", icon: "scroll.fill", tint: .orange)
+            statCard(title: "Garden Ready", value: "\(readyToHarvestCount)", icon: "leaf.fill", tint: .green)
+            let eps = String(format: "%.2f/s", IdleGameManager.shared.totalEchoesPerSecond(for: user))
+            statCard(title: "Echoes", value: eps, icon: "flame.fill", tint: .purple)
+        }
+        .padding(.horizontal)
+    }
+
+    private func statCard(title: String, value: String, icon: String, tint: Color) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: icon).foregroundColor(.white).padding(10).background(tint.opacity(0.6)).clipShape(RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading) {
+                Text(title).font(.caption).foregroundColor(.secondary)
+                Text(value).font(.headline)
+            }
+            Spacer()
+        }
+        .padding()
+        .background(Material.regular)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var automationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Worker Automations").font(.title2).bold().padding(.horizontal)
+            VStack(spacing: 12) {
+                // Gardener Controls
+                automationRow(icon: "leaf.fill", color: .green) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Gardeners").font(.headline)
+                        Toggle("Auto-harvest ready plants", isOn: Binding(get: { user.guildAutomation.autoHarvestGarden }, set: { v in var s = user.guildAutomation; s.autoHarvestGarden = v; user.guildAutomation = s }))
+                        Toggle("Auto-plant Habit Seeds", isOn: Binding(get: { user.guildAutomation.autoPlantHabitSeeds }, set: { v in var s = user.guildAutomation; s.autoPlantHabitSeeds = v; user.guildAutomation = s }))
+                        HStack {
+                            Text("Maintain plots: \(user.guildAutomation.gardenerMaintainPlots)")
+                            Spacer()
+                            Stepper("", value: Binding(get: { user.guildAutomation.gardenerMaintainPlots }, set: { v in var s = user.guildAutomation; s.gardenerMaintainPlots = max(0, min(6, v)); user.guildAutomation = s }))
+                                .labelsHidden()
+                        }
+                        if user.guildAutomation.autoPlantHabitSeeds {
+                            seedPicker
+                        }
+                    }
+                }
+
+                // Forager Controls
+                automationRow(icon: "bag.fill", color: .brown) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Foragers").font(.headline)
+                        Toggle("Gather materials for the Altar", isOn: Binding(get: { user.guildAutomation.foragerGatherForAltar }, set: { v in var s = user.guildAutomation; s.foragerGatherForAltar = v; user.guildAutomation = s }))
+                        Text("Items are periodically added to your inventory based on Forager levels.").font(.caption).foregroundColor(.secondary)
+                    }
+                }
+
+                // Seer Controls
+                automationRow(icon: "eye.fill", color: .purple) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Seers").font(.headline)
+                        Toggle("Attune the Altar (boost Echoes)", isOn: Binding(get: { user.guildAutomation.seerAttuneAltar }, set: { v in var s = user.guildAutomation; s.seerAttuneAltar = v; user.guildAutomation = s }))
+                        Text("When enabled, Seers increase your Echo generation.").font(.caption).foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private var seedPicker: some View {
+        let seedOptions: [Item] = (user.inventory ?? [])
+            .compactMap { ItemDatabase.shared.getItem(id: $0.itemID) }
+            .filter { $0.plantableType == .habitSeed }
+        return Group {
+            if !seedOptions.isEmpty {
+                HStack {
+                    Text("Preferred seed:")
+                    Spacer()
+                    Menu(content: {
+                        Button("Any available") { var s = user.guildAutomation; s.preferredHabitSeedID = nil; user.guildAutomation = s }
+                        ForEach(seedOptions, id: \.id) { item in
+                            Button(item.name) { var s = user.guildAutomation; s.preferredHabitSeedID = item.id; user.guildAutomation = s }
+                        }
+                    }, label: {
+                        let selectedName = seedOptions.first(where: { $0.id == user.guildAutomation.preferredHabitSeedID })?.name ?? "Any"
+                        HStack { Text(selectedName); Image(systemName: "chevron.down").font(.caption) }
+                    })
+                }
+            }
+        }
+    }
+
+    private func automationRow<Content: View>(icon: String, color: Color, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon).foregroundColor(.white).padding(10).background(color.opacity(0.7)).clipShape(RoundedRectangle(cornerRadius: 8))
+            content()
+            Spacer()
+        }
+        .padding()
+        .background(Material.regular)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
