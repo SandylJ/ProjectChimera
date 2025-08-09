@@ -249,6 +249,7 @@ struct GuildHallView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var user: User
     @State private var timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    @State private var showMemberList: Bool = false
 
     private var guild: Guild? { user.guild }
     private var members: [GuildMember] { user.guildMembers ?? [] }
@@ -280,16 +281,41 @@ struct GuildHallView: View {
                 // Automations
                 automationSection
 
-                // Members
+                // Members Summary (clean UI)
                 Section {
-                    Text("Your Guild Members").font(.title2).bold().padding(.horizontal)
+                    HStack {
+                        Text("Your Guild Members").font(.title2).bold()
+                        Spacer()
+                        Button(action: { showMemberList.toggle() }) {
+                            HStack(spacing: 6) {
+                                Text(showMemberList ? "Hide List" : "Show List")
+                                Image(systemName: showMemberList ? "chevron.up" : "chevron.down")
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.horizontal)
+
                     if members.isEmpty {
                         Text("No members yet. Hire someone from the Guild Master!")
                             .foregroundColor(.secondary)
                             .padding(.horizontal)
                     } else {
-                        ForEach(members) { member in
-                            GuildMemberRowView(member: member, user: user)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
+                            statCard(title: "Seeds Planted", value: "\(user.totalSeedsPlantedByGuild + user.totalCropsPlantedByGuild)", icon: "leaf.fill", tint: .green)
+                            statCard(title: "Trees Harvested", value: "\(user.totalTreesHarvestedByGuild)", icon: "tree.fill", tint: .green)
+                            statCard(title: "Crops Harvested", value: "\(user.totalCropsHarvestedByGuild)", icon: "tray.full.fill", tint: .orange)
+                            statCard(title: "Items Found", value: "\(user.totalItemsFoundByGuild)", icon: "bag.fill", tint: .brown)
+                        }
+                        .padding(.horizontal)
+
+                        if showMemberList {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(members) { member in
+                                    GuildMemberRowView(member: member, user: user)
+                                }
+                            }
+                            .transition(.opacity)
                         }
                     }
                 }
