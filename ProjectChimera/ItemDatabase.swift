@@ -13,6 +13,7 @@ final class ItemDatabase {
 
         // Expeditions
         self.expeditions = ItemDatabase.createAllExpeditions()
+        print("DEBUG: ItemDatabase initialized with \(self.expeditions.count) expeditions: \(self.expeditions.map { $0.id })")
 
         // Master Lists
         self.masterStatueList = ItemDatabase.createAllStatueTemplates()
@@ -59,7 +60,14 @@ final class ItemDatabase {
     // MARK: - Expeditions
     private var expeditions: [Expedition] = []
     func getAllExpeditions() -> [Expedition] { expeditions }
-    func getExpedition(id: String) -> Expedition? { expeditions.first { $0.id == id } }
+    func getExpedition(id: String) -> Expedition? { 
+        let expedition = expeditions.first { $0.id == id }
+        if expedition == nil {
+            print("DEBUG: Failed to find expedition with ID: \(id)")
+            print("DEBUG: Available expedition IDs: \(expeditions.map { $0.id })")
+        }
+        return expedition
+    }
 
     // MARK: - Quest Templates
     struct QuestTemplate {

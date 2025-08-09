@@ -428,6 +428,9 @@ struct ActiveHuntsCard: View {
     @State private var showingHuntDetails = false
     @State private var selectedHunt: ActiveHunt?
     @State private var showingUpgradeMenu = false
+    @State private var now = Date()
+    
+    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     
     private var totalDPS: Double {
         let combatants = (user.guildMembers ?? []).filter { $0.isCombatant }
@@ -463,10 +466,12 @@ struct ActiveHuntsCard: View {
                     Text("\(totalKillsPerHour)/hr")
                         .font(.subheadline.bold())
                         .foregroundColor(.green)
+                        .animation(.easeInOut(duration: 0.5), value: totalKillsPerHour)
                     
                     Text("\(totalGoldPerHour) gold/hr")
                         .font(.caption)
                         .foregroundColor(.yellow)
+                        .animation(.easeInOut(duration: 0.5), value: totalGoldPerHour)
                 }
             }
             
@@ -485,6 +490,7 @@ struct ActiveHuntsCard: View {
                         EnhancedHuntProgressRow(
                             hunt: hunt,
                             user: user,
+                            now: now,
                             onTap: {
                                 selectedHunt = hunt
                                 showingHuntDetails = true
@@ -518,11 +524,16 @@ struct ActiveHuntsCard: View {
         .cornerRadius(12)
         .sheet(isPresented: $showingHuntDetails) {
             if let hunt = selectedHunt {
-                HuntDetailView(hunt: hunt, user: user, modelContext: modelContext)
+                LiveHuntDetailView(hunt: hunt, user: user, modelContext: modelContext)
             }
         }
         .sheet(isPresented: $showingUpgradeMenu) {
             HuntUpgradeView(user: user, modelContext: modelContext)
+        }
+        .onReceive(timer) { newDate in
+            self.now = newDate
+            // Process hunts in real-time
+            GuildManager.shared.processHunts(for: user, deltaTime: 0.5, context: modelContext)
         }
     }
 }
@@ -632,6 +643,7 @@ struct UnclaimedRewardsSection: View {
 struct EnhancedHuntProgressRow: View {
     let hunt: ActiveHunt
     let user: User
+    let now: Date
     let onTap: () -> Void
     
     private var enemyName: String {
@@ -676,16 +688,32 @@ struct EnhancedHuntProgressRow: View {
         return killsPerSecond * 5 // Base 5 gold per kill
     }
     
+    private var timeSinceLastUpdate: TimeInterval {
+        return now.timeIntervalSince(hunt.lastUpdated)
+    }
+    
+    private var estimatedKillsSinceLastUpdate: Int {
+        return Int(killsPerSecond * timeSinceLastUpdate)
+    }
+    
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                // Enemy icon
-                Image(systemName: enemyIcon)
-                    .font(.title2)
-                    .foregroundColor(enemyColor)
-                    .frame(width: 40, height: 40)
-                    .background(enemyColor.opacity(0.2))
-                    .cornerRadius(8)
+                // Enemy icon with pulsing animation
+                ZStack {
+                    Circle()
+                        .fill(enemyColor.opacity(0.3))
+                        .frame(width: 40, height: 40)
+                        .scaleEffect(1.0 + 0.1 * sin(now.timeIntervalSince1970 * 2))
+                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: now)
+                    
+                    Image(systemName: enemyIcon)
+                        .font(.title2)
+                        .foregroundColor(enemyColor)
+                }
+                .frame(width: 40, height: 40)
+                .background(enemyColor.opacity(0.2))
+                .cornerRadius(8)
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(enemyName)
@@ -693,9 +721,10 @@ struct EnhancedHuntProgressRow: View {
                         .foregroundColor(.primary)
                     
                     HStack {
-                        Text("\(hunt.killsAccumulated) kills")
+                        Text("\(hunt.killsAccumulated + estimatedKillsSinceLastUpdate) kills")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .animation(.easeInOut(duration: 0.5), value: hunt.killsAccumulated + estimatedKillsSinceLastUpdate)
                         
                         Text("•")
                             .font(.caption)
@@ -704,6 +733,7 @@ struct EnhancedHuntProgressRow: View {
                         Text("\(Int(killsPerSecond * 3600))/hr")
                             .font(.caption)
                             .foregroundColor(.green)
+                            .animation(.easeInOut(duration: 0.5), value: killsPerSecond)
                     }
                 }
                 
@@ -717,24 +747,57 @@ struct EnhancedHuntProgressRow: View {
                     Text("\(Int(goldPerSecond * 3600)) gold/hr")
                         .font(.caption)
                         .foregroundColor(.yellow)
+                        .animation(.easeInOut(duration: 0.5), value: goldPerSecond)
                 }
             }
             .padding()
             .background(Material.thin)
             .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(enemyColor.opacity(0.3), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
 }
 
-struct HuntDetailView: View {
+struct LiveHuntDetailView: View {
     let hunt: ActiveHunt
     let user: User
     let modelContext: ModelContext
     @Environment(\.dismiss) private var dismiss
+    @State private var now = Date()
+    @State private var particles: [HuntParticle] = []
+    
+    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     
     private var enemyName: String {
         hunt.enemyID.replacingOccurrences(of: "enemy_", with: "").capitalized
+    }
+    
+    private var enemyIcon: String {
+        switch hunt.enemyID {
+        case "enemy_goblin": return "tortoise.fill"
+        case "enemy_zombie": return "bandage.fill"
+        case "enemy_spider": return "ant.fill"
+        case "enemy_dragon": return "flame.fill"
+        case "enemy_skeleton": return "skull.fill"
+        case "enemy_ghost": return "sparkles"
+        default: return "sword.fill"
+        }
+    }
+    
+    private var enemyColor: Color {
+        switch hunt.enemyID {
+        case "enemy_goblin": return .green
+        case "enemy_zombie": return .purple
+        case "enemy_spider": return .brown
+        case "enemy_dragon": return .red
+        case "enemy_skeleton": return .gray
+        case "enemy_ghost": return .blue
+        default: return .orange
+        }
     }
     
     private var huntMembers: [GuildMember] {
@@ -757,60 +820,137 @@ struct HuntDetailView: View {
         return killsPerSecond * 5
     }
     
+    private var timeSinceLastUpdate: TimeInterval {
+        return now.timeIntervalSince(hunt.lastUpdated)
+    }
+    
+    private var estimatedKillsSinceLastUpdate: Int {
+        return Int(killsPerSecond * timeSinceLastUpdate)
+    }
+    
+    private var totalKills: Int {
+        return hunt.killsAccumulated + estimatedKillsSinceLastUpdate
+    }
+    
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Enemy info
-                    VStack(spacing: 12) {
-                        Image(systemName: "sword.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.red)
-                        
-                        Text(enemyName)
-                            .font(.title)
-                            .bold()
-                        
-                        Text("Passive hunting in progress")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .background(Material.regular)
-                    .cornerRadius(12)
-                    
-                    // Stats
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        StatCard(title: "Total Kills", value: "\(hunt.killsAccumulated)", icon: "target", color: .red)
-                        StatCard(title: "Kills/Hour", value: "\(Int(killsPerSecond * 3600))", icon: "speedometer", color: .green)
-                        StatCard(title: "Gold/Hour", value: "\(Int(goldPerSecond * 3600))", icon: "dollarsign.circle", color: .yellow)
-                        StatCard(title: "Total DPS", value: "\(Int(totalDPS))", icon: "bolt", color: .blue)
-                    }
-                    
-                    // Hunters
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Active Hunters")
-                            .font(.headline)
-                        
-                        ForEach(huntMembers, id: \.id) { member in
-                            HunterRow(member: member)
-                        }
-                    }
-                    .padding()
-                    .background(Material.regular)
-                    .cornerRadius(12)
-                    
-                    // Stop hunt button
-                    Button("Stop Hunt") {
-                        stopHunt()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .frame(maxWidth: .infinity)
+            ZStack {
+                // Background gradient
+                LinearGradient(colors: [enemyColor.opacity(0.1), enemyColor.opacity(0.05)], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+                
+                // Particle effects
+                ForEach(particles) { particle in
+                    Circle()
+                        .fill(particle.color)
+                        .frame(width: particle.size, height: particle.size)
+                        .position(particle.position)
+                        .opacity(particle.opacity)
+                        .animation(.easeInOut(duration: 1.0), value: particle.opacity)
                 }
-                .padding()
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Enemy info with live animation
+                        VStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(enemyColor.opacity(0.3))
+                                    .frame(width: 80, height: 80)
+                                    .scaleEffect(1.0 + 0.15 * sin(now.timeIntervalSince1970 * 1.5))
+                                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: now)
+                                
+                                Image(systemName: enemyIcon)
+                                    .font(.system(size: 40))
+                                    .foregroundColor(enemyColor)
+                            }
+                            
+                            Text(enemyName)
+                                .font(.title)
+                                .bold()
+                            
+                            Text("Live hunting in progress")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Material.regular)
+                        .cornerRadius(12)
+                        
+                        // Live stats with animations
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                            LiveStatCard(
+                                title: "Total Kills",
+                                value: "\(totalKills)",
+                                icon: "target",
+                                color: .red,
+                                now: now
+                            )
+                            LiveStatCard(
+                                title: "Kills/Hour",
+                                value: "\(Int(killsPerSecond * 3600))",
+                                icon: "speedometer",
+                                color: .green,
+                                now: now
+                            )
+                            LiveStatCard(
+                                title: "Gold/Hour",
+                                value: "\(Int(goldPerSecond * 3600))",
+                                icon: "dollarsign.circle",
+                                color: .yellow,
+                                now: now
+                            )
+                            LiveStatCard(
+                                title: "Total DPS",
+                                value: "\(Int(totalDPS))",
+                                icon: "bolt",
+                                color: .blue,
+                                now: now
+                            )
+                        }
+                        
+                        // Active hunters with live updates
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Active Hunters")
+                                .font(.headline)
+                            
+                            ForEach(huntMembers, id: \.id) { member in
+                                LiveHunterRow(member: member, now: now)
+                            }
+                        }
+                        .padding()
+                        .background(Material.regular)
+                        .cornerRadius(12)
+                        
+                        // Hunt progress visualization
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Hunt Progress")
+                                .font(.headline)
+                            
+                            ProgressView(value: Double(totalKills % 100) / 100.0)
+                                .progressViewStyle(LinearProgressViewStyle(tint: enemyColor))
+                                .scaleEffect(x: 1, y: 2, anchor: .center)
+                            
+                            Text("\(totalKills % 100)/100 kills in current wave")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(Material.regular)
+                        .cornerRadius(12)
+                        
+                        // Stop hunt button
+                        Button("Stop Hunt") {
+                            stopHunt()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .padding()
+                }
             }
-            .navigationTitle("Hunt Details")
+            .navigationTitle("Live Hunt")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -819,6 +959,36 @@ struct HuntDetailView: View {
                     }
                 }
             }
+        }
+        .onReceive(timer) { newDate in
+            self.now = newDate
+            updateParticles()
+            // Process hunts in real-time
+            GuildManager.shared.processHunts(for: user, deltaTime: 0.5, context: modelContext)
+        }
+    }
+    
+    private func updateParticles() {
+        // Remove old particles
+        particles = particles.filter { $0.opacity > 0 }
+        
+        // Limit the number of particles to prevent performance issues
+        if particles.count < 20 {
+            // Add new particles based on kills (less frequently)
+            if Int(now.timeIntervalSince1970 * 10) % 5 == 0 { // Every 0.5 seconds
+                let newParticle = HuntParticle(
+                    position: CGPoint(x: CGFloat.random(in: 50...350), y: CGFloat.random(in: 100...600)),
+                    color: [enemyColor, .yellow, .green].randomElement()!,
+                    size: CGFloat.random(in: 3...8)
+                )
+                particles.append(newParticle)
+            }
+        }
+        
+        // Update existing particles more efficiently
+        for i in 0..<particles.count {
+            particles[i].opacity -= 0.015 // Slower fade
+            particles[i].position.y -= 0.5 // Slower movement
         }
     }
     
@@ -830,6 +1000,121 @@ struct HuntDetailView: View {
         modelContext.delete(hunt)
         
         dismiss()
+    }
+}
+
+struct HuntParticle: Identifiable {
+    let id = UUID()
+    var position: CGPoint
+    let color: Color
+    let size: CGFloat
+    var opacity: Double = 1.0
+}
+
+struct LiveStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let now: Date
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                    .scaleEffect(1.0 + 0.1 * sin(now.timeIntervalSince1970 * 3))
+                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: now)
+                
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+            }
+            
+            Text(value)
+                .font(.title2.bold())
+                .foregroundColor(.primary)
+                .animation(.easeInOut(duration: 0.5), value: value)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Material.regular)
+        .cornerRadius(12)
+    }
+}
+
+struct LiveHunterRow: View {
+    let member: GuildMember
+    let now: Date
+    
+    private var roleIcon: String {
+        switch member.role {
+        case .knight: return "shield.fill"
+        case .archer: return "arrow.up.right"
+        case .wizard: return "sparkles"
+        case .rogue: return "bolt.fill"
+        case .cleric: return "cross.fill"
+        default: return "person.fill"
+        }
+    }
+    
+    private var roleColor: Color {
+        switch member.role {
+        case .knight: return .blue
+        case .archer: return .gray
+        case .wizard: return .purple
+        case .rogue: return .orange
+        case .cleric: return .green
+        default: return .secondary
+        }
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(roleColor.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                    .scaleEffect(1.0 + 0.05 * sin(now.timeIntervalSince1970 * 2 + Double(member.id.hashValue)))
+                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: now)
+                
+                Image(systemName: roleIcon)
+                    .font(.title3)
+                    .foregroundColor(roleColor)
+            }
+            .frame(width: 40, height: 40)
+            .background(roleColor.opacity(0.2))
+            .cornerRadius(6)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(member.name)
+                    .font(.subheadline.bold())
+                
+                Text("\(member.role.rawValue) Lv.\(member.level)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(member.combatDPS())) DPS")
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
+                    .animation(.easeInOut(duration: 0.5), value: member.combatDPS())
+                
+                Text("\(Int(member.combatDPS() / 10.0 * 3600)) kills/hr")
+                    .font(.caption)
+                    .foregroundColor(.green)
+                    .animation(.easeInOut(duration: 0.5), value: member.combatDPS())
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -1064,11 +1349,220 @@ struct GuildMembersTab: View {
                 // Hire New Members
                 HireMembersSection(user: user, modelContext: modelContext)
                 
-                // Current Members
-                CurrentMembersSection(guildMembers: guildMembers, user: user, modelContext: modelContext)
+                // Current Members (Grouped by Role)
+                GroupedMembersSection(guildMembers: guildMembers, user: user, modelContext: modelContext)
             }
             .padding()
         }
+    }
+}
+
+struct GroupedMembersSection: View {
+    let guildMembers: [GuildMember]
+    let user: User
+    let modelContext: ModelContext
+    
+    private var groupedMembers: [GuildMember.Role: [GuildMember]] {
+        Dictionary(grouping: guildMembers) { $0.role }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Guild Members (\(guildMembers.count))")
+                .font(.headline)
+            
+            if guildMembers.isEmpty {
+                Text("No members yet. Hire some to get started!")
+                    .foregroundColor(.secondary)
+                    .italic()
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                    ForEach(GuildMember.Role.allCases, id: \.self) { role in
+                        if let members = groupedMembers[role], !members.isEmpty {
+                            RoleGroupCard(
+                                role: role,
+                                members: members,
+                                user: user,
+                                modelContext: modelContext
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Material.regular)
+        .cornerRadius(12)
+    }
+}
+
+struct RoleGroupCard: View {
+    let role: GuildMember.Role
+    let members: [GuildMember]
+    let user: User
+    let modelContext: ModelContext
+    
+    @State private var showingBulkUpgradeAlert = false
+    @State private var upgradeMessage = ""
+    
+    private var totalLevel: Int {
+        members.reduce(0) { $0 + $1.level }
+    }
+    
+    private var averageLevel: Double {
+        members.isEmpty ? 0 : Double(totalLevel) / Double(members.count)
+    }
+    
+    private var totalUpgradeCost: Int {
+        members.reduce(0) { $0 + $1.upgradeCost() }
+    }
+    
+    private var canAffordBulkUpgrade: Bool {
+        user.gold >= totalUpgradeCost
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with role info
+            HStack {
+                ZStack {
+                    Circle()
+                        .fill(roleColor)
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: roleIcon)
+                        .foregroundColor(.white)
+                        .font(.system(size: 16, weight: .bold))
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(role.rawValue)
+                        .font(.headline)
+                        .bold()
+                    
+                    Text("\(members.count) member\(members.count == 1 ? "" : "s") • Avg Lv.\(String(format: "%.1f", averageLevel))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Total Level: \(totalLevel)")
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundColor(.blue)
+                    
+                    Text("\(totalUpgradeCost) Gold")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Member stats summary
+            HStack(spacing: 16) {
+                if members.contains(where: { $0.isCombatant }) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Total DPS")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("\(Int(totalDPS))")
+                            .font(.subheadline)
+                            .bold()
+                            .foregroundColor(.red)
+                    }
+                }
+                
+                if role.hasSpecialAbility {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Special Ability")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(role.specialAbilityDescription)
+                            .font(.caption)
+                            .foregroundColor(.purple)
+                    }
+                }
+                
+                Spacer()
+            }
+            
+            // Bulk upgrade button
+            Button(action: performBulkUpgrade) {
+                HStack {
+                    Image(systemName: "arrow.up.circle.fill")
+                    Text("Upgrade All \(role.rawValue)s")
+                    Spacer()
+                    Text("\(totalUpgradeCost) Gold")
+                        .font(.caption)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(canAffordBulkUpgrade ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                .foregroundColor(canAffordBulkUpgrade ? .blue : .gray)
+                .cornerRadius(8)
+            }
+            .disabled(!canAffordBulkUpgrade)
+            .buttonStyle(.plain)
+        }
+        .padding()
+        .background(Material.thin)
+        .cornerRadius(12)
+        .alert("Bulk Upgrade Result", isPresented: $showingBulkUpgradeAlert) {
+            Button("OK") { }
+        } message: {
+            Text(upgradeMessage)
+        }
+    }
+    
+    private var totalDPS: Double {
+        members.reduce(0.0) { $0 + $1.combatDPS() }
+    }
+    
+    private var roleColor: Color {
+        switch role {
+        case .knight: return .blue
+        case .archer: return .green
+        case .wizard: return .purple
+        case .rogue: return .gray
+        case .cleric: return .yellow
+        case .forager: return .brown
+        case .gardener: return .green
+        case .alchemist: return .orange
+        case .seer: return .indigo
+        case .blacksmith: return .red
+        }
+    }
+    
+    private var roleIcon: String {
+        switch role {
+        case .knight: return "shield.fill"
+        case .archer: return "arrowshape.turn.up.right.circle.fill"
+        case .wizard: return "wand.and.stars"
+        case .rogue: return "figure.run.circle.fill"
+        case .cleric: return "cross.case.fill"
+        case .forager: return "leaf.fill"
+        case .gardener: return "tree.fill"
+        case .alchemist: return "flask.fill"
+        case .seer: return "eye.fill"
+        case .blacksmith: return "hammer.fill"
+        }
+    }
+    
+    private func performBulkUpgrade() {
+        guard canAffordBulkUpgrade else {
+            upgradeMessage = "Not enough gold for bulk upgrade"
+            showingBulkUpgradeAlert = true
+            return
+        }
+        
+        // Perform bulk upgrade
+        for member in members {
+            GuildManager.shared.upgradeGuildMember(member: member, user: user, context: modelContext)
+        }
+        
+        upgradeMessage = "Upgraded all \(members.count) \(role.rawValue)\(members.count == 1 ? "" : "s")!"
+        showingBulkUpgradeAlert = true
     }
 }
 
@@ -1612,6 +2106,9 @@ struct GuildExpeditionsTab: View {
     @State private var selectedMembers: Set<UUID> = []
     @State private var showingExpeditionDetails = false
     @State private var showingActiveExpeditions = false
+    @State private var now = Date()
+    
+    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     
     private var availableMembers: [GuildMember] {
         (user.guildMembers ?? []).filter { !$0.isOnExpedition }
@@ -1626,9 +2123,10 @@ struct GuildExpeditionsTab: View {
             VStack(spacing: 20) {
                 // Active Expeditions Section
                 if !activeExpeditions.isEmpty {
-                    ActiveExpeditionsSection(
+                    LiveActiveExpeditionsSection(
                         expeditions: activeExpeditions,
                         guildMembers: user.guildMembers ?? [],
+                        now: now,
                         onComplete: { expedition in
                             GuildManager.shared.completeExpedition(expedition: expedition, for: user, context: modelContext)
                         }
@@ -1673,13 +2171,19 @@ struct GuildExpeditionsTab: View {
             // Check for completed expeditions
             GuildManager.shared.checkCompletedExpeditions(for: user, context: modelContext)
         }
+        .onReceive(timer) { newDate in
+            self.now = newDate
+            // Check for completed expeditions every second
+            GuildManager.shared.checkCompletedExpeditions(for: user, context: modelContext)
+        }
     }
 }
 
 // MARK: - Active Expeditions Section
-struct ActiveExpeditionsSection: View {
+struct LiveActiveExpeditionsSection: View {
     let expeditions: [ActiveExpedition]
     let guildMembers: [GuildMember]
+    let now: Date
     let onComplete: (ActiveExpedition) -> Void
     
     var body: some View {
@@ -1704,26 +2208,38 @@ struct ActiveExpeditionCard: View {
     let expedition: ActiveExpedition
     let guildMembers: [GuildMember]
     let onComplete: (ActiveExpedition) -> Void
+    @State private var now = Date()
+    
+    private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    
+    private var expeditionData: Expedition? {
+        ItemDatabase.shared.getExpedition(id: expedition.expeditionID)
+    }
     
     private var progress: Double {
-        let totalDuration = expedition.expedition?.duration ?? 1
-        let elapsed = Date().timeIntervalSince(expedition.startTime)
+        guard let expeditionData = expeditionData else { return 0.0 }
+        let totalDuration = expeditionData.duration
+        let elapsed = now.timeIntervalSince(expedition.startTime)
         return min(elapsed / totalDuration, 1.0)
     }
     
     private var timeRemaining: String {
-        let remaining = expedition.endTime.timeIntervalSinceNow
+        guard let expeditionData = expeditionData else { return "Unknown" }
+        let remaining = expedition.startTime.addingTimeInterval(expeditionData.duration).timeIntervalSince(now)
         if remaining <= 0 {
             return "Complete!"
         }
         
         let hours = Int(remaining) / 3600
         let minutes = Int(remaining) % 3600 / 60
+        let seconds = Int(remaining) % 60
         
         if hours > 0 {
-            return "\(hours)h \(minutes)m"
+            return String(format: "%dh %02dm %02ds", hours, minutes, seconds)
+        } else if minutes > 0 {
+            return String(format: "%dm %02ds", minutes, seconds)
         } else {
-            return "\(minutes)m"
+            return String(format: "%ds", seconds)
         }
     }
     
@@ -1733,17 +2249,23 @@ struct ActiveExpeditionCard: View {
         }
     }
     
+    private var isCompleted: Bool {
+        progress >= 1.0
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(expedition.expedition?.name ?? "Unknown Expedition")
+                    Text(expeditionData?.name ?? "Unknown Expedition")
                         .font(.headline)
                         .bold()
+                        .foregroundColor(isCompleted ? .green : .primary)
                     
-                    Text(expedition.expedition?.description ?? "")
+                    Text(expeditionData?.description ?? "Expedition details not available")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(2)
                 }
                 
                 Spacer()
@@ -1751,9 +2273,11 @@ struct ActiveExpeditionCard: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(timeRemaining)
                         .font(.caption)
-                        .foregroundColor(progress >= 1.0 ? .green : .orange)
+                        .foregroundColor(isCompleted ? .green : .orange)
+                        .bold()
+                        .animation(.easeInOut(duration: 0.5), value: timeRemaining)
                     
-                    if progress >= 1.0 {
+                    if isCompleted {
                         Button("Claim Rewards") {
                             onComplete(expedition)
                         }
@@ -1764,10 +2288,26 @@ struct ActiveExpeditionCard: View {
                 }
             }
             
-            // Progress Bar
-            ProgressView(value: progress)
-                .progressViewStyle(.linear)
-                .tint(progress >= 1.0 ? .green : .blue)
+            // Progress Bar with live updates
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Progress")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("\(Int(progress * 100))%")
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(isCompleted ? .green : .blue)
+                }
+                
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .tint(isCompleted ? .green : .blue)
+                    .scaleEffect(x: 1, y: 1.5, anchor: .center)
+            }
             
             // Member Icons
             HStack {
@@ -1790,6 +2330,52 @@ struct ActiveExpeditionCard: View {
                     .cornerRadius(4)
                 }
             }
+            
+            // Rewards preview - Cleaned up to show just one icon per reward type
+            if let expeditionData = expeditionData {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Rewards:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 8) {
+                        // XP Reward
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .font(.caption)
+                                .foregroundColor(.yellow)
+                            Text("\(expeditionData.xpReward) XP")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.2))
+                        .cornerRadius(4)
+                        
+                        // Item Rewards - Show total quantities with one icon per type
+                        let groupedItems = groupedRewards(expeditionData.lootTable)
+                        ForEach(Array(groupedItems.sorted(by: { $0.key < $1.key }).prefix(2)), id: \.key) { item in
+                            HStack(spacing: 4) {
+                                Image(systemName: "bag.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                                Text("\(item.value)x \(item.key)")
+                                    .font(.caption)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.2))
+                            .cornerRadius(4)
+                        }
+                        
+                        if groupedItems.count > 2 {
+                            Text("+\(groupedItems.count - 2) more")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
         }
         .padding()
         .background(
@@ -1797,9 +2383,36 @@ struct ActiveExpeditionCard: View {
                 .fill(Material.regular)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(progress >= 1.0 ? Color.green.opacity(0.3) : Color.blue.opacity(0.3), lineWidth: 1)
+                        .stroke(isCompleted ? Color.green.opacity(0.3) : Color.blue.opacity(0.3), lineWidth: 1)
                 )
         )
+        .onReceive(timer) { newDate in
+            self.now = newDate
+        }
+    }
+    
+    private func groupedRewards(_ lootTable: [String: Int]) -> [String: Int] {
+        var grouped: [String: Int] = [:]
+        
+        for (itemID, quantity) in lootTable {
+            let baseName = formatItemName(itemID)
+            if let existingQuantity = grouped[baseName] {
+                grouped[baseName] = existingQuantity + quantity
+            } else {
+                grouped[baseName] = quantity
+            }
+        }
+        
+        return grouped
+    }
+    
+    private func formatItemName(_ itemID: String) -> String {
+        let name = itemID.replacingOccurrences(of: "item_", with: "")
+            .replacingOccurrences(of: "material_", with: "")
+            .replacingOccurrences(of: "equip_", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+        return name
     }
     
     private func memberRoleIcon(for role: GuildMember.Role) -> String {
@@ -1941,7 +2554,7 @@ struct AvailableExpeditionCard: View {
                     .cornerRadius(4)
                 
                 ForEach(Array(expedition.lootTable.prefix(2)), id: \.key) { item in
-                    Text("\(item.value)x \(item.key)")
+                    Text("\(item.value)x \(formatItemName(item.key))")
                         .font(.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -1974,6 +2587,15 @@ struct AvailableExpeditionCard: View {
         )
     }
     
+    private func formatItemName(_ itemID: String) -> String {
+        let name = itemID.replacingOccurrences(of: "item_", with: "")
+            .replacingOccurrences(of: "material_", with: "")
+            .replacingOccurrences(of: "equip_", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+        return name
+    }
+    
     private func roleColor(for role: GuildMember.Role) -> Color {
         switch role {
         case .forager, .gardener: return .green
@@ -1992,17 +2614,36 @@ struct ExpeditionDetailView: View {
     let availableMembers: [GuildMember]
     let onLaunch: (Set<UUID>) -> Void
     
-    @State private var selectedMembers: Set<UUID> = []
+    @State private var selectedQuantities: [GuildMember.Role: Int] = [:]
     @Environment(\.dismiss) private var dismiss
     
+    private var groupedMembers: [GuildMember.Role: [GuildMember]] {
+        Dictionary(grouping: availableMembers) { $0.role }
+    }
+    
+    private var totalSelectedMembers: Int {
+        selectedQuantities.values.reduce(0, +)
+    }
+    
     private var canLaunch: Bool {
-        selectedMembers.count >= expedition.minMembers &&
-        (expedition.requiredRoles?.isEmpty ?? true || 
-         expedition.requiredRoles?.allSatisfy { role in
-             selectedMembers.contains { memberID in
-                 availableMembers.first { $0.id == memberID }?.role == role
-             }
-         } ?? true)
+        let hasMinMembers = totalSelectedMembers >= expedition.minMembers
+        
+        let hasRequiredRoles = expedition.requiredRoles?.allSatisfy { role in
+            selectedQuantities[role, default: 0] > 0
+        } ?? true
+        
+        return hasMinMembers && hasRequiredRoles
+    }
+    
+    private var selectedMemberIDs: Set<UUID> {
+        var ids: Set<UUID> = []
+        for (role, quantity) in selectedQuantities {
+            if let members = groupedMembers[role] {
+                let selectedMembers = Array(members.prefix(quantity))
+                ids.formUnion(selectedMembers.map { $0.id })
+            }
+        }
+        return ids
     }
     
     var body: some View {
@@ -2043,9 +2684,7 @@ struct ExpeditionDetailView: View {
                                         .foregroundColor(roleColor(for: role))
                                     Text(role.rawValue)
                                     Spacer()
-                                    if selectedMembers.contains(where: { memberID in
-                                        availableMembers.first { $0.id == memberID }?.role == role
-                                    }) {
+                                    if selectedQuantities[role, default: 0] > 0 {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(.green)
                                     } else {
@@ -2061,24 +2700,23 @@ struct ExpeditionDetailView: View {
                         .cornerRadius(12)
                     }
                     
-                    // Available Members
+                    // Available Workers by Role
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Select Members (\(selectedMembers.count)/\(expedition.minMembers))")
+                        Text("Select Workers (\(totalSelectedMembers)/\(expedition.minMembers))")
                             .font(.headline)
                         
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
-                            ForEach(availableMembers, id: \.id) { member in
-                                MemberSelectionCard(
-                                    member: member,
-                                    isSelected: selectedMembers.contains(member.id),
-                                    onToggle: { isSelected in
-                                        if isSelected {
-                                            selectedMembers.insert(member.id)
-                                        } else {
-                                            selectedMembers.remove(member.id)
+                        LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
+                            ForEach(GuildMember.Role.allCases, id: \.self) { role in
+                                if let members = groupedMembers[role], !members.isEmpty {
+                                    WorkerRoleCard(
+                                        role: role,
+                                        members: members,
+                                        selectedQuantity: selectedQuantities[role, default: 0],
+                                        onQuantityChanged: { quantity in
+                                            selectedQuantities[role] = quantity
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
@@ -2096,7 +2734,7 @@ struct ExpeditionDetailView: View {
                         
                         ForEach(Array(expedition.lootTable), id: \.key) { item in
                             HStack {
-                                Label("\(item.value)x \(item.key)", systemImage: "bag.fill")
+                                Label("\(item.value)x \(formatItemName(item.key))", systemImage: "bag.fill")
                                     .foregroundColor(.green)
                                 Spacer()
                             }
@@ -2119,12 +2757,174 @@ struct ExpeditionDetailView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Launch") {
-                        onLaunch(selectedMembers)
+                        onLaunch(selectedMemberIDs)
                     }
                     .disabled(!canLaunch)
                 }
             }
         }
+    }
+    
+    private func formatItemName(_ itemID: String) -> String {
+        let name = itemID.replacingOccurrences(of: "item_", with: "")
+            .replacingOccurrences(of: "material_", with: "")
+            .replacingOccurrences(of: "equip_", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+        return name
+    }
+    
+    private func roleIcon(for role: GuildMember.Role) -> String {
+        switch role {
+        case .forager: return "leaf.fill"
+        case .gardener: return "drop.fill"
+        case .alchemist: return "flask.fill"
+        case .seer: return "eye.fill"
+        case .blacksmith: return "hammer.fill"
+        case .knight: return "shield.fill"
+        case .archer: return "arrow.up.right"
+        case .wizard: return "sparkles"
+        case .rogue: return "bolt.fill"
+        case .cleric: return "cross.fill"
+        }
+    }
+    
+    private func roleColor(for role: GuildMember.Role) -> Color {
+        switch role {
+        case .forager, .gardener: return .green
+        case .alchemist, .seer: return .purple
+        case .blacksmith: return .orange
+        case .knight, .cleric: return .blue
+        case .archer, .rogue: return .gray
+        case .wizard: return .indigo
+        }
+    }
+}
+
+struct WorkerRoleCard: View {
+    let role: GuildMember.Role
+    let members: [GuildMember]
+    let selectedQuantity: Int
+    let onQuantityChanged: (Int) -> Void
+    
+    private var maxQuantity: Int {
+        members.count
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: roleIcon(for: role))
+                    .font(.title2)
+                    .foregroundColor(roleColor(for: role))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(role.rawValue)
+                        .font(.headline)
+                        .bold()
+                    
+                    Text("\(members.count) available")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(selectedQuantity) selected")
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundColor(selectedQuantity > 0 ? .blue : .secondary)
+                    
+                    Text("of \(maxQuantity)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Quantity selector
+            HStack(spacing: 12) {
+                Button(action: {
+                    if selectedQuantity > 0 {
+                        onQuantityChanged(selectedQuantity - 1)
+                    }
+                }) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(selectedQuantity > 0 ? .red : .gray)
+                }
+                .disabled(selectedQuantity == 0)
+                
+                Text("\(selectedQuantity)")
+                    .font(.title2)
+                    .bold()
+                    .frame(minWidth: 40)
+                
+                Button(action: {
+                    if selectedQuantity < maxQuantity {
+                        onQuantityChanged(selectedQuantity + 1)
+                    }
+                }) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(selectedQuantity < maxQuantity ? .green : .gray)
+                }
+                .disabled(selectedQuantity == maxQuantity)
+                
+                Spacer()
+                
+                // Quick select buttons
+                if maxQuantity > 1 {
+                    Button("All") {
+                        onQuantityChanged(maxQuantity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(selectedQuantity == maxQuantity)
+                    
+                    Button("None") {
+                        onQuantityChanged(0)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(selectedQuantity == 0)
+                }
+            }
+            
+            // Selected members preview
+            if selectedQuantity > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Selected Members:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 4) {
+                        ForEach(Array(members.prefix(selectedQuantity)), id: \.id) { member in
+                            HStack(spacing: 4) {
+                                Image(systemName: "person.fill")
+                                    .font(.caption)
+                                    .foregroundColor(roleColor(for: role))
+                                
+                                Text(member.name)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(roleColor(for: role).opacity(0.2))
+                            .cornerRadius(4)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Material.regular)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(selectedQuantity > 0 ? roleColor(for: role).opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
     
     private func roleIcon(for role: GuildMember.Role) -> String {
@@ -2533,5 +3333,34 @@ struct GuildPerksCard: View {
         .padding()
         .background(Material.regular)
         .cornerRadius(12)
+    }
+}
+
+// MARK: - GuildMember.Role Extensions
+extension GuildMember.Role {
+    var hasSpecialAbility: Bool {
+        switch self {
+        case .forager, .gardener, .alchemist, .seer, .blacksmith:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    var specialAbilityDescription: String {
+        switch self {
+        case .forager:
+            return "Finds materials"
+        case .gardener:
+            return "Auto-harvests"
+        case .alchemist:
+            return "Brews potions"
+        case .seer:
+            return "Boosts echoes"
+        case .blacksmith:
+            return "Crafts items"
+        default:
+            return ""
+        }
     }
 }

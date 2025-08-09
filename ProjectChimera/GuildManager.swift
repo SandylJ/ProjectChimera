@@ -55,7 +55,10 @@ final class GuildManager: ObservableObject {
     }
     
     func completeExpedition(expedition: ActiveExpedition, for user: User, context: ModelContext) {
-        guard let expeditionData = expedition.expedition else { return }
+        guard let expeditionData = ItemDatabase.shared.getExpedition(id: expedition.expeditionID) else { 
+            print("Failed to find expedition data for ID: \(expedition.expeditionID)")
+            return 
+        }
         
         // Give rewards
         user.totalXP += expeditionData.xpReward
@@ -85,7 +88,11 @@ final class GuildManager: ObservableObject {
     func checkCompletedExpeditions(for user: User, context: ModelContext) {
         guard let expeditions = user.activeExpeditions, !expeditions.isEmpty else { return }
         
-        let completedExpeditions = expeditions.filter { $0.endTime <= .now }
+        let completedExpeditions = expeditions.filter { expedition in
+            guard let expeditionData = ItemDatabase.shared.getExpedition(id: expedition.expeditionID) else { return false }
+            let endTime = expedition.startTime.addingTimeInterval(expeditionData.duration)
+            return endTime <= Date()
+        }
         
         for expedition in completedExpeditions {
             completeExpedition(expedition: expedition, for: user, context: context)
