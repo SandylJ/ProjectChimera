@@ -44,6 +44,7 @@ struct QuestsView: View {
                         completionLog
                     }
                 }
+                .padding(.bottom, 8)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -83,7 +84,7 @@ struct QuestsView: View {
 
     // MARK: - Board
     private var boardContent: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 36) {
             if !completedQuests.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Ready to Claim").font(.title3.bold()).padding(.horizontal)
@@ -116,7 +117,7 @@ struct QuestsView: View {
                         )
                         .padding(.horizontal)
                 } else {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 18) {
                         ForEach(activeQuests) { quest in
                             QuestCardSpectacular(quest: quest, user: user, onPrimary: { })
                                 .padding(.horizontal)
@@ -127,7 +128,7 @@ struct QuestsView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("Available Quests").font(.title3.bold()).padding(.horizontal)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 20)], spacing: 20) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 20)], spacing: 22) {
                     ForEach(availableQuests) { quest in
                         QuestCardSpectacular(quest: quest, user: user, onPrimary: { })
                     }
@@ -220,10 +221,23 @@ private struct QuestCardSpectacular: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(quest.title).font(.headline).foregroundStyle(GameTheme.textPrimary)
-                        Text(quest.questDescription).font(.caption).foregroundStyle(GameTheme.textSecondary)
-                        HStack(spacing: 8) { ForEach(categoryChips, id: \.self) { Chip(text: $0) } }
+                        Text(quest.title)
+                            .font(.headline)
+                            .foregroundStyle(GameTheme.textPrimary)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                        Text(quest.questDescription)
+                            .font(.caption)
+                            .foregroundStyle(GameTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(categoryChips, id: \.self) { Chip(text: $0) }
+                            }
+                        }
                     }
+                    .layoutPriority(1)
                     Spacer()
                     Image(systemName: iconForQuest())
                         .font(.system(size: 20, weight: .bold))
@@ -242,7 +256,7 @@ private struct QuestCardSpectacular: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Rewards").font(.caption.bold()).foregroundStyle(GameTheme.textSecondary)
-                    WrapHStack(spacing: 10) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
                         ForEach(quest.rewards) { reward in
                             RewardPill(reward: reward)
                         }
@@ -268,7 +282,7 @@ private struct QuestCardSpectacular: View {
                 }
             }
             .padding(18)
-            .frame(minHeight: 160)
+            .frame(minHeight: 220)
         )
     }
 
@@ -300,7 +314,11 @@ private struct RewardPill: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon).foregroundStyle(color)
-            Text(label).font(.footnote.bold()).foregroundStyle(.white)
+            Text(label)
+                .font(.footnote.bold())
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
         .padding(.vertical, 8).padding(.horizontal, 12)
         .background(.white.opacity(0.10), in: Capsule())
