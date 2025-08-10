@@ -1842,14 +1842,14 @@ struct GuildMemberDetailView: View {
                     
                     // Member Stats
                     VStack(spacing: 16) {
-                        StatRow(title: "Level", value: "\(member.level)", icon: "star.fill", color: .yellow)
-                        StatRow(title: "Experience", value: "\(member.xp)", icon: "chart.line.uptrend.xyaxis", color: .blue)
+                        GuildStatRow(title: "Level", value: "\(member.level)", icon: "star.fill", color: .yellow)
+                        GuildStatRow(title: "Experience", value: "\(member.xp)", icon: "chart.line.uptrend.xyaxis", color: .blue)
                         
                         if member.isCombatant {
-                            StatRow(title: "Combat DPS", value: "\(Int(member.combatDPS()))", icon: "sword", color: .red)
+                            GuildStatRow(title: "Combat DPS", value: "\(Int(member.combatDPS()))", icon: "sword", color: .red)
                         }
                         
-                        StatRow(title: "Upgrade Cost", value: "\(member.upgradeCost()) Gold", icon: "dollarsign.circle", color: .green)
+                        GuildStatRow(title: "Upgrade Cost", value: "\(member.upgradeCost()) Gold", icon: "dollarsign.circle", color: .green)
                     }
                     .padding()
                     .background(Material.regular)
@@ -1942,7 +1942,7 @@ struct GuildMemberDetailView: View {
     }
 }
 
-struct StatRow: View {
+struct GuildStatRow: View {
     let title: String
     let value: String
     let icon: String
@@ -3247,92 +3247,118 @@ struct StartHuntView: View {
         return GuildManager.shared.calculateHuntKillsPerSecond(hunt: tempHunt, user: user)
     }
     
+    private var enemySelectionView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Target")
+                .font(.headline)
+            
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 12) {
+                ForEach(eligibleEnemies, id: \.id) { enemy in
+                    VStack(spacing: 8) {
+                        Image(systemName: enemy.icon)
+                            .font(.title2)
+                            .foregroundColor(enemy.color)
+                        Text(enemy.name).font(.subheadline.bold())
+                        Text(enemy.blurb)
+                            .font(.caption2)
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.secondary)
+                        Button(selectedEnemyID == enemy.id ? "Selected" : "Select") {
+                            selectedEnemyID = enemy.id
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Material.thin)
+                    .cornerRadius(8)
+                }
+            }
+        }
+    }
+    
+    private var memberSelectionView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Assign Hunters")
+                .font(.headline)
+            
+            if availableCombatants.isEmpty {
+                Text("No combat-ready hunters available")
+                    .foregroundColor(.secondary)
+                    .italic()
+            } else {
+                memberGrid
+            }
+        }
+    }
+    
+    private var memberGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 12) {
+            ForEach(availableCombatants, id: \.id) { member in
+                memberButton(for: member)
+            }
+        }
+    }
+    
+    private func memberButton(for member: GuildMember) -> some View {
+        let isSelected = selectedMemberIDs.contains(member.id)
+        return Button {
+            if isSelected { selectedMemberIDs.remove(member.id) }
+            else { selectedMemberIDs.insert(member.id) }
+        } label: {
+            memberButtonLabel(for: member, isSelected: isSelected)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func memberButtonLabel(for member: GuildMember, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: iconName(for: member.role))
+                .foregroundColor(colorFor(role: member.role))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(member.name).font(.subheadline.bold())
+                Text("\(member.role.rawValue) Lv.\(member.level)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if isSelected { 
+                Image(systemName: "checkmark.circle.fill").foregroundColor(.green) 
+            }
+        }
+        .padding()
+        .background(isSelected ? Color.green.opacity(0.15) : Color.clear)
+        .cornerRadius(8)
+    }
+    
+    private var previewStatsView: some View {
+        Group {
+            if selectedEnemyID != nil && !selectedMemberIDs.isEmpty {
+                VStack(spacing: 8) {
+                    Text("Estimated Output")
+                        .font(.headline)
+                    
+                    let killsPerHour = Int(previewKillsPerSecond * 3600)
+                    let goldPerHour = killsPerHour * GuildManager.shared.adjustedGoldPerKill(for: selectedEnemyID!)
+                    Text("\(killsPerHour) kills/hr • \(goldPerHour) gold/hr")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Material.regular)
+                .cornerRadius(12)
+            }
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
-                    // Enemy selection with unlock gating and blurbs
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Choose Target")
-                            .font(.headline)
-                        
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 12) {
-                            ForEach(eligibleEnemies, id: \.id) { enemy in
-                                VStack(spacing: 8) {
-                                    Image(systemName: enemy.icon)
-                                        .font(.title2)
-                                        .foregroundColor(enemy.color)
-                                    Text(enemy.name).font(.subheadline.bold())
-                                    Text(enemy.blurb)
-                                        .font(.caption2)
-                                        .multilineTextAlignment(.center)
-                                        .foregroundColor(.secondary)
-                                    Button(selectedEnemyID == enemy.id ? "Selected" : "Select") {
-                                        selectedEnemyID = enemy.id
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .controlSize(.small)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Material.thin)
-                                .cornerRadius(8)
-                            }
-                        }
-                    }
-                    
-                    // Member selection
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Assign Hunters")
-                            .font(.headline)
-                        
-                        if availableCombatants.isEmpty {
-                            Text("No combat-ready hunters available")
-                                .foregroundColor(.secondary)
-                                .italic()
-                        } else {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 12) {
-                                ForEach(availableCombatants, id: \.id) { member in
-                                    let isSelected = selectedMemberIDs.contains(member.id)
-                                    Button {
-                                        if isSelected { selectedMemberIDs.remove(member.id) }
-                                        else { selectedMemberIDs.insert(member.id) }
-                                    } label: {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: iconName(for: member.role))
-                                                .foregroundColor(colorFor(role: member.role))
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(member.name).font(.subheadline.bold())
-                                                Text("\(member.role.rawValue) Lv.\(member.level)")
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            Spacer()
-                                            if isSelected { Image(systemName: "checkmark.circle.fill").foregroundColor(.green) }
-                                        }
-                                        .padding()
-                                        .background(isSelected ? Color.green.opacity(0.15) : Material.thin)
-                                        .cornerRadius(8)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Preview stats
-                    if selectedEnemyID != nil && !selectedMemberIDs.isEmpty {
-                        VStack(spacing: 8) {
-                            Text("Estimated Output")
-                                .font(.headline)
-                            Text("\(Int(previewKillsPerSecond * 3600)) kills/hr • \(Int(previewKillsPerSecond * 3600) * GuildManager.shared.adjustedGoldPerKill(for: selectedEnemyID!)) gold/hr")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .background(Material.regular)
-                        .cornerRadius(12)
-                    }
+                    enemySelectionView
+                    memberSelectionView
+                    previewStatsView
                     
                     Button("Start Hunt") { startHunt() }
                         .buttonStyle(.borderedProminent)
