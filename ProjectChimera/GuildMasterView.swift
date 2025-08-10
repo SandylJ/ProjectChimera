@@ -428,6 +428,7 @@ struct ActiveHuntsCard: View {
     @State private var showingHuntDetails = false
     @State private var selectedHunt: ActiveHunt?
     @State private var showingStartMenu = false
+    @State private var showingAllocationPlanner = false
     @State private var now = Date()
     
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
@@ -511,6 +512,12 @@ struct ActiveHuntsCard: View {
                 
                 Spacer()
                 
+                Button("Allocate Hunters") {
+                    showingAllocationPlanner = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                
                 NavigationLink("Manage Hunters") {
                     HuntUpgradeView(user: user, modelContext: modelContext)
                 }
@@ -528,6 +535,9 @@ struct ActiveHuntsCard: View {
         }
         .sheet(isPresented: $showingStartMenu) {
             StartHuntView(user: user, modelContext: modelContext)
+        }
+        .sheet(isPresented: $showingAllocationPlanner) {
+            HuntAllocationPlannerView(user: user, modelContext: modelContext)
         }
         .onReceive(timer) { newDate in
             self.now = newDate
@@ -3623,5 +3633,219 @@ extension GuildMember.Role {
         default:
             return false
         }
+    }
+}
+
+// MARK: - Hunt Allocation Planner
+struct HuntAllocationPlannerView: View {
+    let user: User
+    let modelContext: ModelContext
+    @Environment(\.dismiss) private var dismiss
+
+    // enemyID -> role -> count
+    @State private var allocations: [String: [GuildMember.Role: Int]] = [:]
+    @State private var reassignFromActiveHunts: Bool = true
+
+    private var guildLevel: Int { user.guild?.level ?? 1 }
+
+    private var availableEnemies: [(name: String, icon: String, color: Color, id: String, requiredGuildLevel: Int, blurb: String)] {
+        [
+            ("Spider", "ant.fill", .brown, "enemy_spider", 1, "Skittish and venomous. Weak to precise strikes."),
+            ("Goblin", "tortoise.fill", .green, "enemy_goblin", 3, "Chaotic but fragile. Knights excel here."),
+            ("Zombie", "bandage.fill", .purple, "enemy_zombie", 5, "Undead resist blades. Magic devastates."),
+            ("Skeleton", "skull.fill", .gray, "enemy_skeleton", 7, "Bones shatter under blunt and magic."),
+            ("Wolf", "pawprint.fill", .teal, "enemy_wolf", 9, "Fast packs. Archers keep them at bay."),
+            ("Ghost", "sparkles", .blue, "enemy_ghost", 12, "Ethereal. Holy and arcane prevail."),
+            ("Dragon", "flame.fill", .red, "enemy_dragon", 18, "Apex foe. Requires elite force.")
+        ].filter { guildLevel >= $0.requiredGuildLevel }
+    }
+
+    private var combatantRoles: [GuildMember.Role] { [.knight, .archer, .wizard, .rogue, .cleric] }
+
+    // Available members pool based on toggle
+    private var availableMembersPool: [GuildMember] {
+        let activeIDs: Set<UUID> = Set((user.activeHunts ?? []).flatMap { $0.memberIDs })
+        let all = (user.guildMembers ?? []).filter { $0.isCombatant }
+        if reassignFromActiveHunts { return all }
+        return all.filter { !activeIDs.contains($0.id) }
+    }
+
+    private var availableByRole: [GuildMember.Role: [GuildMember]] {
+        Dictionary(grouping: availableMembersPool, by: { $0.role })
+    }
+
+    private var totalAvailableCountByRole: [GuildMember.Role: Int] {
+        var map: [GuildMember.Role: Int] = [:]
+        for role in combatantRoles {
+            map[role] = availableByRole[role]?.count ?? 0
+        }
+        return map
+    }
+
+    // Sum allocations across enemies for a given role
+    private func allocatedCount(for role: GuildMember.Role) -> Int {
+        allocations.values.reduce(0) { acc, perRole in acc + (perRole[role] ?? 0) }
+    }
+
+    private func remainingCount(for role: GuildMember.Role) -> Int {
+        max(0, (totalAvailableCountByRole[role] ?? 0) - allocatedCount(for: role))
+    }
+
+    private func setAllocation(enemyID: String, role: GuildMember.Role, newValue: Int) {
+        var roleMap = allocations[enemyID] ?? [:]
+        let othersAllocated = allocatedCount(for: role) - (roleMap[role] ?? 0)
+        let cap = max(0, (totalAvailableCountByRole[role] ?? 0) - othersAllocated)
+        roleMap[role] = min(max(0, newValue), cap)
+        allocations[enemyID] = roleMap
+    }
+
+    // Plan concrete member assignments per enemy using best available by role
+    private var plannedAssignments: [String: [GuildMember]] {
+        var used: Set<UUID> = []
+        var result: [String: [GuildMember]] = [:]
+
+        // Sort pool by DPS desc within each role
+        let sortedByRole: [GuildMember.Role: [GuildMember]] = availableByRole.mapValues { $0.sorted { $0.combatDPS() > $1.combatDPS() } }
+
+        for enemy in availableEnemies {
+            var assigned: [GuildMember] = []
+            let roleMap = allocations[enemy.id] ?? [:]
+            for role in combatantRoles {
+                let need = roleMap[role] ?? 0
+                guard need > 0 else { continue }
+                let pool = (sortedByRole[role] ?? []).filter { !used.contains($0.id) }
+                for member in pool.prefix(need) { assigned.append(member); used.insert(member.id) }
+            }
+            if !assigned.isEmpty { result[enemy.id] = assigned }
+        }
+        return result
+    }
+
+    private func previewKPS(for enemyID: String) -> Double {
+        let members = plannedAssignments[enemyID] ?? []
+        let tempHunt = ActiveHunt(enemyID: enemyID, memberIDs: members.map { $0.id }, owner: user)
+        return GuildManager.shared.calculateHuntKillsPerSecond(hunt: tempHunt, user: user)
+    }
+
+    private func clearAll() {
+        allocations.removeAll()
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Availability summary
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Reassign from existing hunts", isOn: $reassignFromActiveHunts)
+                            .tint(.blue)
+                        HStack(spacing: 12) {
+                            ForEach(combatantRoles, id: \.self) { role in
+                                let remaining = remainingCount(for: role)
+                                let total = totalAvailableCountByRole[role] ?? 0
+                                Text("\(role.rawValue): \(total - remaining)/\(total)")
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.secondary.opacity(0.1))
+                                    .cornerRadius(6)
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Material.regular)
+                    .cornerRadius(12)
+
+                    // Enemy sections
+                    ForEach(availableEnemies, id: \.id) { enemy in
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Image(systemName: enemy.icon).foregroundColor(enemy.color)
+                                Text(enemy.name).font(.headline)
+                                Spacer()
+                                // Preview numbers
+                                let kps = previewKPS(for: enemy.id)
+                                let kph = Int(kps * 3600)
+                                let gph = kph * GuildManager.shared.adjustedGoldPerKill(for: enemy.id)
+                                Text("\(kph)/hr • \(gph) gold/hr")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            // Role steppers
+                            VStack(spacing: 8) {
+                                ForEach(combatantRoles, id: \.self) { role in
+                                    let current = allocations[enemy.id]?[role] ?? 0
+                                    HStack {
+                                        Text(role.rawValue)
+                                        Spacer()
+                                        Stepper(value: Binding(
+                                            get: { allocations[enemy.id]?[role] ?? 0 },
+                                            set: { setAllocation(enemyID: enemy.id, role: role, newValue: $0) }
+                                        ), in: 0...(current + remainingCount(for: role))) {
+                                            Text("\(allocations[enemy.id]?[role] ?? 0)")
+                                                .frame(width: 40, alignment: .trailing)
+                                        }
+                                        .labelsHidden()
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Material.thin)
+                        .cornerRadius(10)
+                    }
+
+                    HStack {
+                        Button("Clear All") { clearAll() }
+                            .buttonStyle(.bordered)
+                        Spacer()
+                        Button("Apply Plan") { applyPlan() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(plannedAssignments.isEmpty)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Allocate Hunters")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+            .onAppear { prefillAllocationsFromCurrentHunts() }
+        }
+    }
+
+    private func applyPlan() {
+        // Optionally clear existing hunts if reassigning
+        if reassignFromActiveHunts, let existing = user.activeHunts {
+            for hunt in existing { modelContext.delete(hunt) }
+            user.activeHunts?.removeAll()
+        }
+
+        // Create hunts per enemy with assigned members
+        for (enemyID, members) in plannedAssignments {
+            guard !members.isEmpty else { continue }
+            let hunt = ActiveHunt(enemyID: enemyID, memberIDs: members.map { $0.id }, owner: user)
+            modelContext.insert(hunt)
+            user.activeHunts?.append(hunt)
+        }
+        dismiss()
+    }
+
+    private func prefillAllocationsFromCurrentHunts() {
+        guard let hunts = user.activeHunts else { return }
+        var initial: [String: [GuildMember.Role: Int]] = [:]
+        for hunt in hunts {
+            var roleMap: [GuildMember.Role: Int] = initial[hunt.enemyID] ?? [:]
+            for id in hunt.memberIDs {
+                if let m = user.guildMembers?.first(where: { $0.id == id }) {
+                    roleMap[m.role, default: 0] += 1
+                }
+            }
+            if !roleMap.isEmpty { initial[hunt.enemyID] = roleMap }
+        }
+        allocations = initial
     }
 }
