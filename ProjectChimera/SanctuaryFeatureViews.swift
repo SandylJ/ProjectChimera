@@ -593,9 +593,9 @@ struct GuildHallView: View {
             if let existing = user.inventory?.first(where: { $0.itemID == id }) { existing.quantity += qty }
             else { user.inventory?.append(InventoryItem(itemID: id, quantity: qty, owner: user)) }
         }
-        addItem("seed_vigor", 3)
-        addItem("seed_serenity", 2)
-        addItem("crop_sunwheat", 2)
+        addItem("seed_vigor", qty: 3)
+        addItem("seed_serenity", qty: 2)
+        addItem("crop_sunwheat", qty: 2)
         // Plant up to 3 plots
         let plantIDs = ["seed_vigor", "seed_serenity", "crop_sunwheat"]
         for pid in plantIDs {

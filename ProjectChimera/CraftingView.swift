@@ -132,13 +132,12 @@ struct CraftingRoleCard: View {
 
     private var itemsPerHour: Int {
         let baseSeconds: Double
-        let itemID: String
         switch role {
-        case .leatherworker: baseSeconds = 300; itemID = "material_tanned_leather"
-        case .spinner: baseSeconds = 180; itemID = "material_spun_flax"
-        case .weaver: baseSeconds = 420; itemID = "material_linen"
+        case .leatherworker: baseSeconds = 300
+        case .spinner: baseSeconds = 180
+        case .weaver: baseSeconds = 420
         default:
-            baseSeconds = 99999; itemID = ""
+            baseSeconds = 99999
         }
         guard !members.isEmpty else { return 0 }
         let iph = members.reduce(0.0) { partial, m in
