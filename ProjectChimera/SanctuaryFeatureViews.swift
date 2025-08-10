@@ -9,6 +9,11 @@ fileprivate let maxHabitPlotsCap = 24
 public struct HabitGardenView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var user: User
+    @State private var activeTab: GardenTab = .dashboard
+    @State private var now: Date = Date()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    private enum GardenTab: String, CaseIterable { case dashboard, garden, greenhouse, grove, pouch, workers }
     
     private var plantableItemsInInventory: [InventoryItem] {
         user.inventory?.filter { ItemDatabase.shared.getItem(id: $0.itemID)?.itemType == .plantable } ?? []
@@ -28,165 +33,368 @@ public struct HabitGardenView: View {
     private var foragerProgress: Double { min(user.automationProgressForager, 1.0) }
     
     public var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                // Dashboard
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Habit Garden Dashboard").font(.title).bold().padding(.horizontal)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 16)], spacing: 16) {
-                        statCard(title: "Plots", value: "\(user.plantedHabitSeeds?.count ?? 0)/\(maxHabitPlots)", icon: "square.grid.2x2.fill", tint: .green)
-                        statCard(title: "Ready", value: "\(readyToHarvestCount)", icon: "leaf.fill", tint: .mint)
-                        statCard(title: "Gardeners", value: "\(gardenersCount)", icon: "person.fill", tint: .green)
-                        statCard(title: "Foragers", value: "\(foragersCount)", icon: "bag.fill", tint: .brown)
-                        statCard(title: "Gold", value: "\(user.gold)", icon: "creditcard.fill", tint: .yellow)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Live Foraging Progress
-                    if foragersCount > 0 {
-                        HStack(spacing: 12) {
-                            Image(systemName: "bag.fill").foregroundColor(.brown)
-                            VStack(alignment: .leading) {
-                                Text("Foragers").font(.headline)
-                                ProgressView(value: foragerProgress).progressViewStyle(LinearProgressViewStyle(tint: .brown))
-                                Text("Progress to next find").font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
+        ZStack {
+            GameTheme.bgGradient.ignoresSafeArea()
+            SparkleField()
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 16) {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            headerBar
+                            metricsDeck
+                            if readyToHarvestCount > 0 { quickActionsBar }
+                            tabsBar
+                            Group { tabContent }
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 4)
                         }
-                        .padding()
-                        .background(Material.regular)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal)
-                    }
-                }
-
-                // Quick Actions
-                if readyToHarvestCount > 0 {
-                    HStack(spacing: 12) {
-                        Button("Harvest All Ready (\(readyToHarvestCount))") { harvestAllReady() }
-                            .buttonStyle(.borderedProminent).tint(.green)
-                        Spacer()
+                        .padding(14)
                     }
                     .padding(.horizontal)
                 }
-
-                // Workers & Automation
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Workers & Automation").font(.title2).bold()
-                        Spacer()
-                        Button("Kickstart Garden") { kickstartGarden() }
-                            .buttonStyle(.bordered)
-                    }
-                    .padding(.horizontal)
-
-                    // Hire core workers
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 16)], spacing: 16) {
-                        HireableMemberCardView(role: .gardener, user: user)
-                        HireableMemberCardView(role: .forager, user: user)
-                    }
-
-                    // Automation Controls
-                    VStack(spacing: 12) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "leaf.fill").foregroundColor(.white).padding(10).background(Color.green.opacity(0.7)).clipShape(RoundedRectangle(cornerRadius: 8))
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Gardeners").font(.headline)
-                                Toggle("Auto-harvest ready plants", isOn: Binding(get: { user.guildAutomation.autoHarvestGarden }, set: { v in var s = user.guildAutomation; s.autoHarvestGarden = v; user.guildAutomation = s }))
-                                Toggle("Auto-plant Habit Seeds", isOn: Binding(get: { user.guildAutomation.autoPlantHabitSeeds }, set: { v in var s = user.guildAutomation; s.autoPlantHabitSeeds = v; user.guildAutomation = s }))
-                                HStack {
-                                    Text("Maintain plots: \(user.guildAutomation.gardenerMaintainPlots)")
-                                    Spacer()
-                                    Stepper("", value: Binding(get: { user.guildAutomation.gardenerMaintainPlots }, set: { v in var s = user.guildAutomation; s.gardenerMaintainPlots = max(0, min(maxHabitPlotsCap, v)); user.guildAutomation = s })).labelsHidden()
-                                }
-                                if user.guildAutomation.autoPlantHabitSeeds { seedPicker }
-                            }
-                            Spacer()
-                        }
-                        .padding()
-                        .background(Material.regular)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                        HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "bag.fill").foregroundColor(.white).padding(10).background(Color.brown.opacity(0.7)).clipShape(RoundedRectangle(cornerRadius: 8))
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Foragers").font(.headline)
-                                Toggle("Gather materials for the Altar", isOn: Binding(get: { user.guildAutomation.foragerGatherForAltar }, set: { v in var s = user.guildAutomation; s.foragerGatherForAltar = v; user.guildAutomation = s }))
-                                Text("Items are periodically added to your inventory based on Forager levels.").font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
-                        }
-                        .padding()
-                        .background(Material.regular)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    .padding(.horizontal)
-
-                    // Current workers list (only gardeners & foragers here)
-                    let gatherers = (user.guildMembers ?? []).filter { $0.role == .gardener || $0.role == .forager }
-                    if !gatherers.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(gatherers) { member in
-                                GuildMemberRowView(member: member, user: user)
-                            }
-                        }
-                    }
-                }
-
-                // --- Habit Garden Section ---
-                SanctuarySectionView(
-                    title: "Habit Garden",
-                    itemCount: user.plantedHabitSeeds?.count ?? 0,
-                    maxItems: maxHabitPlots,
-                    emptyText: "Plant Habit Seeds from your pouch to gain passive bonuses!"
-                ) {
-                    ForEach(user.plantedHabitSeeds ?? []) { plantedSeed in
-                        GardenPlotView(plantedItem: plantedSeed, user: user)
-                    }
-                }
-                
-                // --- Alchemist's Greenhouse Section ---
-                SanctuarySectionView(
-                    title: "Alchemist's Greenhouse",
-                    itemCount: user.plantedCrops?.count ?? 0,
-                    maxItems: 8,
-                    emptyText: "Plant Crop Seeds to grow valuable crafting materials."
-                ) {
-                    ForEach(user.plantedCrops ?? []) { plantedCrop in
-                        GardenPlotView(plantedItem: plantedCrop, user: user)
-                    }
-                }
-
-                // --- Grove of Elders Section ---
-                SanctuarySectionView(
-                    title: "Grove of Elders",
-                    itemCount: user.plantedTrees?.count ?? 0,
-                    maxItems: 3,
-                    emptyText: "Plant rare Tree Saplings for immense long-term rewards."
-                ) {
-                    ForEach(user.plantedTrees ?? []) { plantedTree in
-                        GardenPlotView(plantedItem: plantedTree, user: user)
-                    }
-                }
-
-                // --- Gardening Pouch Section ---
-                Section {
-                    if plantableItemsInInventory.isEmpty {
-                        Text("Complete tasks to find seeds, crops, and saplings.").font(.caption).foregroundColor(.secondary).padding()
-                    } else {
-                        ForEach(plantableItemsInInventory) { invItem in
-                            PlantablePouchItemView(inventoryItem: invItem, user: user)
-                        }
-                    }
-                } header: {
-                    Text("Gardening Pouch").font(.title2).bold().padding(.horizontal)
-                }
+                .padding(.vertical, 18)
             }
-            .padding(.vertical)
         }
-        .navigationTitle("My Sanctuary")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Habit Garden")
+        .safeAreaInset(edge: .top) {
+            GameHUD(
+                coins: user.gold,
+                gems: user.runes,
+                keys: user.inventory?.filter { ItemDatabase.shared.getItem(id: $0.itemID)?.itemType == .key }.reduce(0) { $0 + $1.quantity } ?? 0
+            )
+            .background(Color.clear)
+        }
+        .onReceive(timer) { date in now = date }
     }
 
+    // MARK: - Header & Tabs
+    private var headerBar: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(LinearGradient(colors: [.green.opacity(0.35), .mint.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 44, height: 44)
+                    .shadow(color: .green.opacity(0.25), radius: 10, x: 0, y: 6)
+                Image(systemName: "leaf.fill").font(.title2.weight(.bold)).foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("The Habit Garden").font(.title.bold()).foregroundStyle(GameTheme.textPrimary)
+                Text("Tend seeds, grow rewards, empower your journey").font(.footnote).foregroundStyle(GameTheme.textSecondary)
+            }
+            Spacer()
+            labelChip(text: "Ready: \(readyToHarvestCount)", icon: "sparkles", tint: .green)
+        }
+    }
+
+    private var tabsBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(GardenTab.allCases, id: \.self) { tab in
+                    let isSel = activeTab == tab
+                    Button(action: { withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { activeTab = tab } }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: icon(for: tab))
+                            Text(title(for: tab))
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(isSel ? Color.white.opacity(0.15) : Color.white.opacity(0.08))
+                        .overlay(Capsule().stroke(Color.white.opacity(isSel ? 0.6 : 0.25), lineWidth: isSel ? 2 : 1))
+                        .foregroundStyle(.white)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func icon(for tab: GardenTab) -> String {
+        switch tab {
+        case .dashboard: return "speedometer"
+        case .garden: return "leaf.fill"
+        case .greenhouse: return "sprinkler.and.droplets"
+        case .grove: return "tree.fill"
+        case .pouch: return "bag.fill"
+        case .workers: return "person.3.fill"
+        }
+    }
+    private func title(for tab: GardenTab) -> String {
+        switch tab {
+        case .dashboard: return "Dashboard"
+        case .garden: return "Garden"
+        case .greenhouse: return "Greenhouse"
+        case .grove: return "Grove"
+        case .pouch: return "Pouch"
+        case .workers: return "Workers"
+        }
+    }
+
+    // MARK: - Deck & Actions
+    private var metricsDeck: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                metricCard(title: "Plots", value: "\(user.plantedHabitSeeds?.count ?? 0)/\(maxHabitPlots)", icon: "square.grid.2x2.fill", tint: .green)
+                metricCard(title: "Ready", value: "\(readyToHarvestCount)", icon: "leaf.fill", tint: .mint)
+            }
+            HStack(spacing: 12) {
+                metricCard(title: "Gardeners", value: "\(gardenersCount)", icon: "person.fill", tint: .green)
+                metricCard(title: "Foragers", value: "\(foragersCount)", icon: "bag.fill", tint: .brown)
+                metricCard(title: "Gold", value: "\(user.gold)", icon: "creditcard.fill", tint: .yellow)
+            }
+            if foragersCount > 0 { foragerRow }
+        }
+    }
+
+    private func metricCard(title: String, value: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack { Image(systemName: icon).foregroundStyle(tint); Spacer() }
+            Text(value).font(.system(.title3, design: .rounded).bold()).foregroundStyle(GameTheme.textPrimary)
+            Text(title).font(.caption).foregroundStyle(GameTheme.textSecondary)
+        }
+        .padding(12)
+        .background(.ultraThinMaterial)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(tint.opacity(0.35), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: tint.opacity(0.15), radius: 8, x: 0, y: 4)
+    }
+
+    private var foragerRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bag.fill").foregroundStyle(.brown)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Foragers").font(.headline).foregroundStyle(GameTheme.textPrimary)
+                ProgressView(value: foragerProgress)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .brown))
+                Text("Progress to next find").font(.caption).foregroundStyle(GameTheme.textSecondary)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(GameTheme.panelFill, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(GameTheme.panelStroke))
+    }
+
+    private var quickActionsBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                harvestAllReady()
+            } label: {
+                HStack(spacing: 8) { Image(systemName: "sparkles"); Text("Harvest All (\(readyToHarvestCount))") }
+            }
+            .buttonStyle(GlowButtonStyle(gradient: LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing), animatedSheen: false))
+            Spacer()
+            Button("Kickstart Garden") { kickstartGarden() }
+                .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient, animatedSheen: false))
+        }
+    }
+
+    // MARK: - Tab Content
+    @ViewBuilder private var tabContent: some View {
+        switch activeTab {
+        case .dashboard:
+            VStack(alignment: .leading, spacing: 18) {
+                sectionHeader("Overview")
+                gardenGrid(items: user.plantedHabitSeeds ?? [])
+                if !(user.plantedCrops ?? []).isEmpty { sectionHeader("Greenhouse"); gardenGrid(items: user.plantedCrops ?? []) }
+                if !(user.plantedTrees ?? []).isEmpty { sectionHeader("Grove of Elders"); gardenGrid(items: user.plantedTrees ?? []) }
+            }
+        case .garden:
+            VStack(alignment: .leading, spacing: 12) { sectionHeader("Habit Garden (\(user.plantedHabitSeeds?.count ?? 0)/\(maxHabitPlots))"); gardenGrid(items: user.plantedHabitSeeds ?? []) }
+        case .greenhouse:
+            VStack(alignment: .leading, spacing: 12) { sectionHeader("Alchemist's Greenhouse"); gardenGrid(items: user.plantedCrops ?? []) }
+        case .grove:
+            VStack(alignment: .leading, spacing: 12) { sectionHeader("Grove of Elders"); gardenGrid(items: user.plantedTrees ?? []) }
+        case .pouch:
+            pouchList
+        case .workers:
+            workersPanel
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack { Text(title).font(.title3.weight(.heavy)).foregroundStyle(GameTheme.textPrimary); Spacer() }
+    }
+
+    private func gardenGrid<T: PersistentModel>(items: [T]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+            ForEach(items) { anyItem in
+                plotCardSpectacular(plantedItem: anyItem)
+            }
+        }
+    }
+
+    // MARK: - Plot Card (Spectacular)
+    private func plotCardSpectacular(plantedItem: any PersistentModel) -> some View {
+        let item: Item? = {
+            if let seed = plantedItem as? PlantedHabitSeed { return seed.seed }
+            if let crop = plantedItem as? PlantedCrop { return crop.crop }
+            if let tree = plantedItem as? PlantedTree { return tree.tree }
+            return nil
+        }()
+        let plantedAt: Date? = {
+            if let seed = plantedItem as? PlantedHabitSeed { return seed.plantedAt }
+            if let crop = plantedItem as? PlantedCrop { return crop.plantedAt }
+            if let tree = plantedItem as? PlantedTree { return tree.plantedAt }
+            return nil
+        }()
+        guard let validItem = item, let validPlantedAt = plantedAt, let growTime = validItem.growTime else {
+            return AnyView(EmptyView())
+        }
+        let elapsed = now.timeIntervalSince(validPlantedAt)
+        let progress = min(max(elapsed / growTime, 0), 1)
+        let isReady = progress >= 1.0
+        return AnyView(
+            VStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    Circle().stroke(Color.white.opacity(0.15), lineWidth: 10)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(AngularGradient(gradient: Gradient(colors: [.green, .mint, .cyan, .green]), center: .center), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Image(systemName: validItem.icon)
+                        .font(.title)
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 3)
+                    if isReady {
+                        Image(systemName: "sparkles").foregroundStyle(.yellow).offset(x: 26, y: -26)
+                    }
+                }
+                .frame(width: 96, height: 96)
+                Text(validItem.name).font(.subheadline.weight(.semibold)).foregroundStyle(GameTheme.textPrimary).lineLimit(2).multilineTextAlignment(.center)
+                if isReady {
+                    Button {
+                        SanctuaryManager.shared.harvest(plantedItem: plantedItem, for: user, context: modelContext)
+                    } label: {
+                        HStack(spacing: 6) { Image(systemName: "scissors"); Text("Harvest") }
+                    }
+                    .buttonStyle(GlowButtonStyle(gradient: LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing), animatedSheen: false))
+                } else {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                    Text(timeRemaining(until: validPlantedAt.addingTimeInterval(growTime)))
+                        .font(.caption2)
+                        .foregroundStyle(GameTheme.textSecondary)
+                }
+            }
+            .padding(12)
+            .background(GameTheme.panelFill, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(GameTheme.panelStroke))
+        )
+    }
+
+    private func labelChip(text: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 6) { Image(systemName: icon); Text(text) }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(tint.opacity(0.15), in: Capsule())
+            .overlay(Capsule().stroke(tint.opacity(0.4), lineWidth: 1))
+            .foregroundStyle(.white)
+    }
+
+    // MARK: - Pouch
+    private var pouchList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Gardening Pouch")
+            if plantableItemsInInventory.isEmpty {
+                Text("Complete tasks to find seeds, crops, and saplings.")
+                    .font(.callout)
+                    .foregroundStyle(GameTheme.textSecondary)
+            } else {
+                ForEach(plantableItemsInInventory) { invItem in
+                    pouchItemCard(invItem)
+                }
+            }
+        }
+    }
+
+    private func pouchItemCard(_ invItem: InventoryItem) -> some View {
+        guard let item = ItemDatabase.shared.getItem(id: invItem.itemID) else { return AnyView(EmptyView()) }
+        return AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.08)).frame(width: 44, height: 44)
+                        Image(systemName: item.icon).foregroundStyle(.white)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(item.name)  x\(invItem.quantity)").font(.headline).foregroundStyle(GameTheme.textPrimary)
+                        Text(item.description).font(.caption).foregroundStyle(GameTheme.textSecondary)
+                    }
+                    Spacer()
+                }
+                HStack(spacing: 10) {
+                    Button {
+                        SanctuaryManager.shared.plantItem(itemID: item.id, for: user, context: modelContext)
+                    } label: { HStack(spacing: 6) { Image(systemName: "leaf.fill"); Text("Plant") } }
+                    .buttonStyle(GlowButtonStyle(gradient: LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing), animatedSheen: false))
+                    Spacer()
+                    Text("Grow: \(formattedGrowTime(item.growTime))")
+                        .font(.caption)
+                        .foregroundStyle(GameTheme.textSecondary)
+                }
+            }
+            .padding(12)
+            .background(GameTheme.panelFill, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(GameTheme.panelStroke))
+        )
+    }
+
+    // MARK: - Workers Panel
+    private var workersPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionHeader("Workers & Automation")
+            HStack(spacing: 12) {
+                HireableMemberCardView(role: .gardener, user: user)
+                HireableMemberCardView(role: .forager, user: user)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 12) {
+                automationRow(icon: "leaf.fill", color: .green) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Gardeners").font(.headline)
+                        Toggle("Auto-harvest ready plants", isOn: Binding(get: { user.guildAutomation.autoHarvestGarden }, set: { v in var s = user.guildAutomation; s.autoHarvestGarden = v; user.guildAutomation = s }))
+                        Toggle("Auto-plant Habit Seeds", isOn: Binding(get: { user.guildAutomation.autoPlantHabitSeeds }, set: { v in var s = user.guildAutomation; s.autoPlantHabitSeeds = v; user.guildAutomation = s }))
+                        HStack { Text("Maintain plots: \(user.guildAutomation.gardenerMaintainPlots)"); Spacer(); Stepper("", value: Binding(get: { user.guildAutomation.gardenerMaintainPlots }, set: { v in var s = user.guildAutomation; s.gardenerMaintainPlots = max(0, min(maxHabitPlotsCap, v)); user.guildAutomation = s })).labelsHidden() }
+                        if user.guildAutomation.autoPlantHabitSeeds { seedPicker }
+                    }
+                }
+                automationRow(icon: "bag.fill", color: .brown) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Foragers").font(.headline)
+                        Toggle("Gather materials for the Altar", isOn: Binding(get: { user.guildAutomation.foragerGatherForAltar }, set: { v in var s = user.guildAutomation; s.foragerGatherForAltar = v; user.guildAutomation = s }))
+                        Text("Items are periodically added to your inventory based on Forager levels.").font(.caption).foregroundStyle(GameTheme.textSecondary)
+                    }
+                }
+            }
+            let gatherers = (user.guildMembers ?? []).filter { $0.role == .gardener || $0.role == .forager }
+            if !gatherers.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(gatherers) { member in
+                        GuildMemberRowView(member: member, user: user)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func formattedGrowTime(_ time: TimeInterval?) -> String {
+        guard let time = time else { return "N/A" }
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = .short
+        return formatter.string(from: time) ?? "-"
+    }
+    
+    private func timeRemaining(until date: Date) -> String {
+        let remaining = date.timeIntervalSince(now)
+        if remaining <= 0 { return "Ready!" }
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: remaining) ?? "..."
+    }
+    
     private var seedPicker: some View {
         let seedOptions: [Item] = (user.inventory ?? [])
             .compactMap { ItemDatabase.shared.getItem(id: $0.itemID) }
