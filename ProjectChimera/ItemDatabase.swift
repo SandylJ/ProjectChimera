@@ -179,20 +179,38 @@ private extension ItemDatabase {
             Spell(id: "spell_surge_of_power", name: "Surge of Power", description: "Your next completed task grants double XP.", requiredLevel: 2, runeCost: 1, effect: .doubleXP),
             Spell(id: "spell_midas_touch", name: "Midas Touch", description: "For 10 minutes, all tasks grant double gold.", requiredLevel: 5, runeCost: 2, effect: .doubleGold),
 
-            // Attribute-boosting Spells
+            // Attribute-boosting Spells (Tier 1)
             Spell(id: "spell_mind_amplification", name: "Mind Amplification", description: "For 5 minutes, gain +50% XP for Mind tasks.", requiredLevel: 3, runeCost: 2, effect: .xpBoost(.intellect, 0.5)),
             Spell(id: "spell_disciplined_focus", name: "Disciplined Focus", description: "For 5 minutes, gain +50% XP for Discipline tasks.", requiredLevel: 3, runeCost: 2, effect: .xpBoost(.discipline, 0.5)),
             Spell(id: "spell_creative_spark", name: "Creative Spark", description: "For 5 minutes, gain +50% XP for Creativity tasks.", requiredLevel: 3, runeCost: 2, effect: .xpBoost(.creativity, 0.5)),
             Spell(id: "spell_resilient_spirit", name: "Resilient Spirit", description: "For 5 minutes, gain +50% XP for Resilience tasks.", requiredLevel: 3, runeCost: 2, effect: .xpBoost(.resilience, 0.5)),
             Spell(id: "spell_mindfulness_aura", name: "Mindfulness Aura", description: "For 5 minutes, gain +50% XP for Mindfulness tasks.", requiredLevel: 3, runeCost: 2, effect: .xpBoost(.mindfulness, 0.5)),
 
-            // Economy/Meta Spells
+            // Economy/Meta Spells (Tier 1)
             Spell(id: "spell_golden_harvest", name: "Golden Harvest", description: "For 10 minutes, all gold drops are increased by 25%.", requiredLevel: 7, runeCost: 3, effect: .goldBoost(0.25)),
             Spell(id: "spell_rune_surge", name: "Rune Surge", description: "For 10 minutes, all rune drops are increased by 10%.", requiredLevel: 10, runeCost: 4, effect: .runeBoost(0.10)),
             Spell(id: "spell_willpower_infusion", name: "Willpower Infusion", description: "For 5 minutes, passively generate 1 willpower every 10 seconds.", requiredLevel: 8, runeCost: 3, effect: .willpowerGeneration(1)),
             Spell(id: "spell_bargain_hunter", name: "Bargain Hunter", description: "For 15 minutes, all shop and upgrade costs are reduced by 5%.", requiredLevel: 12, runeCost: 5, effect: .reducedUpgradeCost(0.05)),
             Spell(id: "spell_guild_inspiration", name: "Guild Inspiration", description: "For 10 minutes, all Guild XP gains are increased by 20%.", requiredLevel: 15, runeCost: 6, effect: .guildXpBoost(0.20)),
-            Spell(id: "spell_verdant_growth", name: "Verdant Growth", description: "For 15 minutes, plant growth speed is increased by 50%.", requiredLevel: 9, runeCost: 3, effect: .plantGrowthSpeed(0.50))
+            Spell(id: "spell_verdant_growth", name: "Verdant Growth", description: "For 15 minutes, plant growth speed is increased by 50%.", requiredLevel: 9, runeCost: 3, effect: .plantGrowthSpeed(0.50)),
+
+            // Echoes (Tier 1)
+            Spell(id: "spell_echo_surge", name: "Echo Surge", description: "+50% Echoes for 10 minutes.", requiredLevel: 5, runeCost: 2, effect: .echoBoost(0.5)),
+
+            // Attribute-boosting Spells (Tier 2)
+            Spell(id: "spell_mind_apex", name: "Apex Intellect", description: "+100% XP from Mind tasks for 5 minutes.", requiredLevel: 20, runeCost: 6, effect: .xpBoost(.intellect, 1.0)),
+            Spell(id: "spell_disciplined_zenith", name: "Zenith of Discipline", description: "+100% XP from Discipline tasks for 5 minutes.", requiredLevel: 20, runeCost: 6, effect: .xpBoost(.discipline, 1.0)),
+            Spell(id: "spell_creativity_ascendant", name: "Creativity Ascendant", description: "+100% XP from Creativity tasks for 5 minutes.", requiredLevel: 20, runeCost: 6, effect: .xpBoost(.creativity, 1.0)),
+            Spell(id: "spell_resilience_unbroken", name: "Unbroken Resilience", description: "+100% XP from Resilience tasks for 5 minutes.", requiredLevel: 20, runeCost: 6, effect: .xpBoost(.resilience, 1.0)),
+            Spell(id: "spell_mindfulness_enlightenment", name: "Moment of Enlightenment", description: "+100% XP from Mindfulness tasks for 5 minutes.", requiredLevel: 20, runeCost: 6, effect: .xpBoost(.mindfulness, 1.0)),
+
+            // Economy/Meta Spells (Tier 2)
+            Spell(id: "spell_river_of_gold", name: "River of Gold", description: "For 10 minutes, all gold gains are increased by 50%.", requiredLevel: 18, runeCost: 6, effect: .goldBoost(0.50)),
+            Spell(id: "spell_rune_torrent", name: "Rune Torrent", description: "For 10 minutes, rune drops are increased by 20%.", requiredLevel: 22, runeCost: 7, effect: .runeBoost(0.20)),
+            Spell(id: "spell_titans_will", name: "Titan's Will", description: "For 5 minutes, passively generate 2 willpower every 10 seconds.", requiredLevel: 16, runeCost: 5, effect: .willpowerGeneration(2)),
+            Spell(id: "spell_wild_bloom", name: "Wild Bloom", description: "For 15 minutes, plant growth speed is increased by 100%.", requiredLevel: 14, runeCost: 5, effect: .plantGrowthSpeed(1.00)),
+            Spell(id: "spell_guild_war_drums", name: "War Drums", description: "For 10 minutes, all Guild XP gains are increased by 50%.", requiredLevel: 22, runeCost: 7, effect: .guildXpBoost(0.50)),
+            Spell(id: "spell_echo_maelstrom", name: "Echo Maelstrom", description: "+100% Echoes for 10 minutes.", requiredLevel: 25, runeCost: 8, effect: .echoBoost(1.0))
         ]
     }
 
