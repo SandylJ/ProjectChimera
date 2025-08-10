@@ -472,6 +472,12 @@ final class Chimera {
     var id: UUID; var name: String; var discipline: Int; var mindfulness: Int
     var intellect: Int; var creativity: Int; var resilience: Int; var headPartID: String
     var bodyPartID: String; var auraEffectID: String; var cosmeticHeadItemID: String; var owner: User?
+    // Preset storage (encoded to keep model lightweight for migrations)
+    private var appearancePresetsData: Data = Data()
+    var appearancePresets: [ChimeraAppearancePreset] {
+        get { (try? JSONDecoder().decode([ChimeraAppearancePreset].self, from: appearancePresetsData)) ?? [] }
+        set { appearancePresetsData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
     init(owner: User) {
         self.id = UUID(); self.name = "Chimera"; self.discipline = 0; self.mindfulness = 0
         self.intellect = 0; self.creativity = 0; self.resilience = 0; self.headPartID = "base_head_01"
@@ -834,4 +840,15 @@ final class UnclaimedCraftedItem {
         self.quantity = quantity
         self.owner = owner
     }
+}
+
+/// Lightweight codable preset for saving/loading Chimera appearance
+struct ChimeraAppearancePreset: Codable, Hashable, Identifiable {
+    var id: UUID = UUID()
+    var slot: Int // 1..3
+    var title: String // e.g., "Slot 1"
+    var auraEffectID: String
+    var headPartID: String
+    var bodyPartID: String
+    var cosmeticHeadItemID: String
 }

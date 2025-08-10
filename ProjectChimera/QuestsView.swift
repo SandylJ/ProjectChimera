@@ -22,7 +22,7 @@ struct QuestsView: View {
     var body: some View {
         ZStack {
             GameTheme.bgGradient.ignoresSafeArea()
-            SparkleField().opacity(0.35).ignoresSafeArea()
+            SparkleField(isAnimated: false).opacity(0.25).ignoresSafeArea()
 
             VStack(spacing: 20) {
                 header

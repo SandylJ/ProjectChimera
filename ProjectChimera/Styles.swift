@@ -10,8 +10,7 @@ struct JuicyButtonStyle: ButtonStyle {
             .background(Color.accentColor)
             .foregroundColor(.white)
             .clipShape(Capsule())
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.5), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
     }
 }
 

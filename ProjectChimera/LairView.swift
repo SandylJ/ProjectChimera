@@ -14,7 +14,7 @@ struct LairView: View {
     var body: some View {
         ZStack {
             GameTheme.bgGradient.ignoresSafeArea()
-            SparkleField()
+            SparkleField(isAnimated: false)
             
             ScrollView {
                 VStack(spacing: 14) {
@@ -191,6 +191,7 @@ private enum LairTab: String, CaseIterable { case wardrobe, equipment, inventory
 @available(macOS 14.0, iOS 17.0, *)
 private struct WardrobePanel: View {
     @Bindable var chimera: Chimera
+    @State private var selectedPresetSlot: Int = 1
     
     private let auraOptions = ["none", "aura_subtle_t1", "aura_strong_t2"]
     private let headOptions = ["base_head_01", "head_runes_t1", "head_runes_t2", "head_feathers_t2"]
@@ -222,6 +223,25 @@ private struct WardrobePanel: View {
                 labeledPicker(title: "Head", selection: $chimera.headPartID, options: headOptions)
                 labeledPicker(title: "Body", selection: $chimera.bodyPartID, options: bodyOptions)
                 labeledPicker(title: "Cosmetic Head", selection: $chimera.cosmeticHeadItemID, options: cosmeticHeadOptions, prettifyPrefix: "item_hat_")
+            }
+            
+            // Presets + Quick Actions
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    Text("Preset Slot").font(.headline).foregroundStyle(GameTheme.textSecondary)
+                    Picker("Preset Slot", selection: $selectedPresetSlot) {
+                        ForEach(1...3, id: \.self) { slot in
+                            Text("Slot \(slot)").tag(slot)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                HStack(spacing: 10) {
+                    Button("Save to Slot") { savePreset(slot: selectedPresetSlot) }
+                        .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient, animatedSheen: false))
+                    Button("Load Slot") { loadPreset(slot: selectedPresetSlot) }
+                        .buttonStyle(GlowButtonStyle(gradient: GameTheme.okGradient, animatedSheen: false))
+                }
             }
             
             // Quick Actions
@@ -283,6 +303,26 @@ private struct WardrobePanel: View {
     
     private func toggleCosmetic() {
         chimera.cosmeticHeadItemID = (chimera.cosmeticHeadItemID == "none") ? "item_hat_wizard" : "none"
+    }
+
+    private func savePreset(slot: Int) {
+        var presets = chimera.appearancePresets.filter { $0.slot != slot }
+        let preset = ChimeraAppearancePreset(slot: slot,
+                                             title: "Slot \(slot)",
+                                             auraEffectID: chimera.auraEffectID,
+                                             headPartID: chimera.headPartID,
+                                             bodyPartID: chimera.bodyPartID,
+                                             cosmeticHeadItemID: chimera.cosmeticHeadItemID)
+        presets.append(preset)
+        chimera.appearancePresets = presets.sorted { $0.slot < $1.slot }
+    }
+
+    private func loadPreset(slot: Int) {
+        guard let p = chimera.appearancePresets.first(where: { $0.slot == slot }) else { return }
+        chimera.auraEffectID = p.auraEffectID
+        chimera.headPartID = p.headPartID
+        chimera.bodyPartID = p.bodyPartID
+        chimera.cosmeticHeadItemID = p.cosmeticHeadItemID
     }
 }
 

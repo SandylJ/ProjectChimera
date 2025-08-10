@@ -125,7 +125,7 @@ struct ProgressBar: View {
 
 struct GlowButtonStyle: ButtonStyle {
     var gradient: LinearGradient = GameTheme.okGradient
-    var animatedSheen: Bool = true
+    var animatedSheen: Bool = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(.headline, design: .rounded))
@@ -201,30 +201,54 @@ struct Chip: View {
 // MARK: - PARTICLES
 
 struct SparkleField: View {
+    var isAnimated: Bool = false
     @State private var t: CGFloat = 0
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1/30)) { _ in
-            Canvas { ctx, size in
-                let stars = 50
-                for i in 0..<stars {
-                    let x = CGFloat((i * 87) % Int(size.width == 0 ? 1 : size.width))
-                    let y = CGFloat((i * 53) % Int(size.height == 0 ? 1 : size.height))
-                    if let symbol = ctx.resolveSymbol(id: i) {
-                        let pos = CGPoint(x: x, y: (y + t).truncatingRemainder(dividingBy: max(size.height, 1)))
-                        ctx.draw(symbol, at: pos)
+        Group {
+            if isAnimated {
+                TimelineView(.animation(minimumInterval: 1/30)) { _ in
+                    Canvas { ctx, size in
+                        let stars = 50
+                        for i in 0..<stars {
+                            let x = CGFloat((i * 87) % Int(size.width == 0 ? 1 : size.width))
+                            let y = CGFloat((i * 53) % Int(size.height == 0 ? 1 : size.height))
+                            if let symbol = ctx.resolveSymbol(id: i) {
+                                let pos = CGPoint(x: x, y: (y + t).truncatingRemainder(dividingBy: max(size.height, 1)))
+                                ctx.draw(symbol, at: pos)
+                            }
+                        }
+                    } symbols: {
+                        ForEach(0..<50, id: \.self) { i in
+                            Circle().fill(.white.opacity(0.12 + Double(i % 5) * 0.05))
+                                .frame(width: CGFloat(2 + (i % 4)), height: CGFloat(2 + (i % 4)))
+                                .blur(radius: 0.5)
+                        }
                     }
                 }
-            } symbols: {
-                ForEach(0..<50, id: \.self) { i in
-                    Circle().fill(.white.opacity(0.12 + Double(i % 5) * 0.05))
-                        .frame(width: CGFloat(2 + (i % 4)), height: CGFloat(2 + (i % 4)))
-                        .blur(radius: 0.5)
+                .onAppear {
+                    withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
+                        t = 800
+                    }
                 }
-            }
-        }
-        .onAppear {
-            withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) {
-                t = 800
+            } else {
+                // Static stars without any timeline or animation
+                Canvas { ctx, size in
+                    let stars = 50
+                    for i in 0..<stars {
+                        let x = CGFloat((i * 87) % Int(size.width == 0 ? 1 : size.width))
+                        let y = CGFloat((i * 53) % Int(size.height == 0 ? 1 : size.height))
+                        if let symbol = ctx.resolveSymbol(id: i) {
+                            let pos = CGPoint(x: x, y: y)
+                            ctx.draw(symbol, at: pos)
+                        }
+                    }
+                } symbols: {
+                    ForEach(0..<50, id: \.self) { i in
+                        Circle().fill(.white.opacity(0.12 + Double(i % 5) * 0.05))
+                            .frame(width: CGFloat(2 + (i % 4)), height: CGFloat(2 + (i % 4)))
+                            .blur(radius: 0.5)
+                    }
+                }
             }
         }
         .allowsHitTesting(false)
