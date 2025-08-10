@@ -148,7 +148,7 @@ struct LairView: View {
                 Text("25")
             }
         }
-        .buttonStyle(GlowButtonStyle())
+        .buttonStyle(GlowButtonStyle(animatedSheen: false))
         .padding(.horizontal, 14)
         .padding(.bottom, 16)
     }
@@ -224,11 +224,11 @@ private struct WardrobePanel: View {
             // Quick Actions
             HStack(spacing: 10) {
                 Button("Randomize") { randomizeAppearance() }
-                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient))
+                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient, animatedSheen: false))
                 Button("Reset") { resetAppearance() }
-                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.okGradient))
+                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.okGradient, animatedSheen: false))
                 Button("Toggle Hat") { toggleCosmetic() }
-                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient))
+                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient, animatedSheen: false))
             }
         }
         .foregroundStyle(GameTheme.textPrimary)
