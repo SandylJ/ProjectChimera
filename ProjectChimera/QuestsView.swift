@@ -24,7 +24,7 @@ struct QuestsView: View {
             GameTheme.bgGradient.ignoresSafeArea()
             SparkleField().opacity(0.35).ignoresSafeArea()
 
-            VStack(spacing: 12) {
+            VStack(spacing: 20) {
                 header
                 Picker("Mode", selection: $selectedView) {
                     ForEach(ViewMode.allCases) { mode in
@@ -33,6 +33,8 @@ struct QuestsView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
 
                 ScrollView {
                     switch selectedView {
@@ -57,17 +59,17 @@ struct QuestsView: View {
     private var header: some View {
         ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: [.purple.opacity(0.45), .blue.opacity(0.45)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                .frame(height: 140)
+                .frame(height: 170)
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .overlay(
                     ZStack {
-                        Image(systemName: "scroll.fill").font(.system(size: 72)).foregroundStyle(.ultraThinMaterial).offset(x: 110, y: -20)
-                        Image(systemName: "sparkles").font(.system(size: 64)).foregroundStyle(.ultraThinMaterial).offset(x: -90, y: 12)
+                        Image(systemName: "scroll.fill").font(.system(size: 72)).foregroundStyle(.ultraThinMaterial).offset(x: 130, y: -16)
+                        Image(systemName: "sparkles").font(.system(size: 64)).foregroundStyle(.ultraThinMaterial).offset(x: -110, y: 18)
                     }
                 )
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("The Quest Board").font(.title.bold()).foregroundStyle(.white)
-                HStack(spacing: 12) {
+                HStack(spacing: 16) {
                     Chip(text: "Active: \(activeQuests.count)")
                     Chip(text: "Available: \(availableQuests.count)")
                     Chip(text: "Completed: \(completedQuests.count)")
@@ -76,24 +78,24 @@ struct QuestsView: View {
             .padding()
         }
         .padding(.horizontal)
-        .padding(.top, 4)
+        .padding(.top, 8)
     }
 
     // MARK: - Board
     private var boardContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 32) {
             if !completedQuests.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Ready to Claim").font(.title3.bold()).padding(.horizontal)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 16) {
                             ForEach(completedQuests) { quest in
                                 QuestCardSpectacular(quest: quest, user: user, onPrimary: {
                                     lastQuestRewards = quest.rewards
                                     QuestManager.shared.claimQuestReward(for: quest, on: user, context: modelContext)
                                     showRewardPopup = true
                                 })
-                                .frame(width: 280)
+                                .frame(width: 300)
                             }
                         }
                         .padding(.horizontal)
@@ -101,12 +103,12 @@ struct QuestsView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("In Progress").font(.title3.bold()).padding(.horizontal)
                 if activeQuests.isEmpty {
                     GlassCard { EmptyView() }
                         .overlay(
-                            VStack(spacing: 8) {
+                            VStack(spacing: 10) {
                                 Text("No active quests yet").foregroundStyle(GameTheme.textPrimary)
                                 Text("Accept a quest from below to begin!").font(.caption).foregroundStyle(GameTheme.textSecondary)
                             }
@@ -114,7 +116,7 @@ struct QuestsView: View {
                         )
                         .padding(.horizontal)
                 } else {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 16) {
                         ForEach(activeQuests) { quest in
                             QuestCardSpectacular(quest: quest, user: user, onPrimary: { })
                                 .padding(.horizontal)
@@ -123,14 +125,15 @@ struct QuestsView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Available Quests").font(.title3.bold()).padding(.horizontal)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 20)], spacing: 20) {
                     ForEach(availableQuests) { quest in
                         QuestCardSpectacular(quest: quest, user: user, onPrimary: { })
                     }
                 }
                 .padding(.horizontal)
+                .padding(.bottom, 8)
             }
         }
         .padding(.vertical)
@@ -141,13 +144,13 @@ struct QuestsView: View {
         let achievements = (user.achievements ?? []).sorted { $0.dateEarned > $1.dateEarned }
         let questCompletions = achievements.filter { $0.title.hasPrefix("Completed:") }
 
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 10) {
+        return VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 14) {
                 GlassCard {
                     EmptyView()
                 }
                 .overlay(
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Image(systemName: "trophy.fill").foregroundStyle(.yellow)
                             Text("Achievements").font(.headline).foregroundStyle(GameTheme.textPrimary)
@@ -166,7 +169,7 @@ struct QuestsView: View {
             if achievements.isEmpty {
                 GlassCard { EmptyView() }
                     .overlay(
-                        VStack(spacing: 8) {
+                        VStack(spacing: 10) {
                             Text("No achievements yet").foregroundStyle(GameTheme.textPrimary)
                             Text("Finish quests to fill your Hall of Fame!").font(.caption).foregroundStyle(GameTheme.textSecondary)
                         }
@@ -174,7 +177,7 @@ struct QuestsView: View {
                     )
                     .padding(.horizontal)
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     ForEach(achievements) { achievement in
                         AchievementRowView(achievement: achievement)
                             .padding(.horizontal)
@@ -214,39 +217,39 @@ private struct QuestCardSpectacular: View {
             EmptyView()
         }
         .overlay(
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(quest.title).font(.headline).foregroundStyle(GameTheme.textPrimary)
                         Text(quest.questDescription).font(.caption).foregroundStyle(GameTheme.textSecondary)
-                        HStack(spacing: 6) { ForEach(categoryChips, id: \.self) { Chip(text: $0) } }
+                        HStack(spacing: 8) { ForEach(categoryChips, id: \.self) { Chip(text: $0) } }
                     }
                     Spacer()
                     Image(systemName: iconForQuest())
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(.white.opacity(0.9))
-                        .padding(8)
+                        .padding(10)
                         .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
                 }
 
                 if quest.status != .available {
                     let p = progressTuple
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         ProgressBar(progress: max(0, min(CGFloat(p.current) / CGFloat(max(p.target, 1)), 1)))
                         Text("Progress: \(p.current)/\(p.target)").font(.caption).foregroundStyle(GameTheme.textSecondary)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Rewards").font(.caption.bold()).foregroundStyle(GameTheme.textSecondary)
-                    WrapHStack(spacing: 8) {
+                    WrapHStack(spacing: 10) {
                         ForEach(quest.rewards) { reward in
                             RewardPill(reward: reward)
                         }
                     }
                 }
 
-                HStack(spacing: 10) {
+                HStack(spacing: 14) {
                     switch quest.status {
                     case .available:
                         Button {
@@ -264,7 +267,8 @@ private struct QuestCardSpectacular: View {
                     Spacer()
                 }
             }
-            .padding(14)
+            .padding(18)
+            .frame(minHeight: 160)
         )
     }
 
@@ -294,11 +298,11 @@ private struct QuestCardSpectacular: View {
 private struct RewardPill: View {
     let reward: LootReward
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: icon).foregroundStyle(color)
             Text(label).font(.footnote.bold()).foregroundStyle(.white)
         }
-        .padding(.vertical, 6).padding(.horizontal, 10)
+        .padding(.vertical, 8).padding(.horizontal, 12)
         .background(.white.opacity(0.10), in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(0.12)))
     }
@@ -338,20 +342,20 @@ private struct AchievementRowView: View {
     var body: some View {
         GlassCard { EmptyView() }
             .overlay(
-                HStack(alignment: .center, spacing: 12) {
+                HStack(alignment: .center, spacing: 16) {
                     Image(systemName: achievement.title.hasPrefix("Completed:") ? "checkmark.seal.fill" : "trophy.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(achievement.title.hasPrefix("Completed:") ? .green : .yellow)
-                        .padding(8)
+                        .padding(10)
                         .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(achievement.title).font(.headline).foregroundStyle(GameTheme.textPrimary)
                         Text(achievement.achievementDescription).font(.caption).foregroundStyle(GameTheme.textSecondary)
                     }
                     Spacer()
                     Text(shortDate(achievement.dateEarned)).font(.caption).foregroundStyle(GameTheme.textSecondary)
                 }
-                .padding(12)
+                .padding(14)
             )
     }
     private func shortDate(_ date: Date) -> String {
@@ -401,7 +405,7 @@ private struct FlowLayout<Content: View>: View {
                     }
             }
         }
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
