@@ -112,6 +112,12 @@ struct AppTabView: View {
                 createDefaultUser()
             } else {
                 print("Found \(users.count) users")
+                // Initialize systems for existing user on first appearance
+                if let user = user {
+                    IdleGameManager.shared.initializeAltar(for: user, context: modelContext)
+                    ObsidianGymnasiumManager.shared.initializeStatues(for: user, context: modelContext)
+                    QuestManager.shared.initializeQuests(for: user, context: modelContext)
+                }
             }
         }
     }
@@ -132,6 +138,9 @@ struct AppTabView: View {
         // Initialize other managers
         ChallengeManager.shared.generateWeeklyChallenges(for: newUser, context: modelContext)
         SpellbookManager.shared.unlockNewSpells(for: newUser)
+        IdleGameManager.shared.initializeAltar(for: newUser, context: modelContext)
+        ObsidianGymnasiumManager.shared.initializeStatues(for: newUser, context: modelContext)
+        QuestManager.shared.initializeQuests(for: newUser, context: modelContext)
 
         do {
             try modelContext.save()

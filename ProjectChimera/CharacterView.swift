@@ -125,6 +125,8 @@ struct CharacterView: View {
                     lastEarnedSeedName = randomSeed.name; showNewSeedBanner = true
                 }
             }
+            // Update quest progress
+            QuestManager.shared.updateQuestProgress(forCompletedTask: task, on: user)
         }
     }
     
