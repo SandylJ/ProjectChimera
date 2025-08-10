@@ -294,15 +294,18 @@ final class GameLogicManager {
     private func checkForLevelUp(user: User) -> Bool {
         let xpForNextLevel = xpRequired(for: user.level + 1)
         if user.totalXP >= xpForNextLevel {
-            user.level += 1; user.gold += 100; 
-        // Apply rune boost from spells
-        var runesGained = 1
-        for (effect, _) in user.activeBuffs {
-            if case .runeBoost(let multiplier) = effect {
-                runesGained = Int(Double(runesGained) * (1.0 + multiplier))
+            user.level += 1
+            // Unlock any new spells available at this level
+            SpellbookManager.shared.unlockNewSpells(for: user)
+            user.gold += 100
+            // Apply rune boost from spells
+            var runesGained = 1
+            for (effect, _) in user.activeBuffs {
+                if case .runeBoost(let multiplier) = effect {
+                    runesGained = Int(Double(runesGained) * (1.0 + multiplier))
+                }
             }
-        }
-        user.runes += runesGained
+            user.runes += runesGained
             _ = checkForLevelUp(user: user)
             return true
         }
