@@ -50,6 +50,8 @@ struct GuildMasterView: View {
         }
         .onAppear {
             initializeGuild()
+            // Merge any duplicate hunts by enemy type before processing
+            GuildManager.shared.mergeDuplicateHunts(for: user, context: modelContext)
             let timePassed = Date().timeIntervalSince(lastAppearance)
             GuildManager.shared.processHunts(for: user, deltaTime: timePassed, context: modelContext)
             lastAppearance = Date()
@@ -373,7 +375,7 @@ struct GuildStatsGrid: View {
             
             StatCard(
                 title: "Active Hunts",
-                value: "\(user.activeHunts?.count ?? 0)",
+                value: "\(Set((user.activeHunts ?? []).map { $0.enemyID }).count)",
                 icon: "crosshairs",
                 color: .red
             )
@@ -458,7 +460,7 @@ struct ActiveHuntsCard: View {
                     Text("Active Hunts")
                         .font(.headline)
                     
-                    Text("\(user.activeHunts?.count ?? 0) running")
+                    Text("\(Set((user.activeHunts ?? []).map { $0.enemyID }).count) running")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -484,16 +486,17 @@ struct ActiveHuntsCard: View {
             }
             
             // Active hunts
-            if let activeHunts = user.activeHunts, !activeHunts.isEmpty {
+            if !(user.activeHunts?.isEmpty ?? true) {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(activeHunts) { hunt in
+                    ForEach(aggregatedDisplayEnemyIDs, id: \.self) { enemyID in
+                        let displayHunt = aggregatedDisplayHunt(for: enemyID)
                         CompactHuntRow(
-                            hunt: hunt,
+                            hunt: displayHunt,
                             user: user,
                             now: now,
                             onTap: {
-                                selectedHunt = hunt
-                                showingHuntDetails = true
+                                // Open allocation planner to adjust fighters for this enemy
+                                showingAllocationPlanner = true
                             }
                         )
                     }
@@ -544,6 +547,22 @@ struct ActiveHuntsCard: View {
             // Update in real-time
             GuildManager.shared.processHunts(for: user, deltaTime: 0.5, context: modelContext)
         }
+    }
+    
+    // Keys for one row per enemyID
+    fileprivate var aggregatedDisplayEnemyIDs: [String] {
+        let hunts = user.activeHunts ?? []
+        let keys = Set(hunts.map { $0.enemyID })
+        return keys.sorted()
+    }
+    // Build a temporary display hunt for a given enemyID by merging member assignments and kills
+    fileprivate func aggregatedDisplayHunt(for enemyID: String) -> ActiveHunt {
+        let hunts = (user.activeHunts ?? []).filter { $0.enemyID == enemyID }
+        let allMembers = Array(Set(hunts.flatMap { $0.memberIDs }))
+        let temp = ActiveHunt(enemyID: enemyID, memberIDs: allMembers, owner: user)
+        temp.killsAccumulated = hunts.reduce(0) { $0 + $1.killsAccumulated }
+        if let earliest = hunts.map({ $0.lastUpdated }).min() { temp.lastUpdated = earliest }
+        return temp
     }
 }
 
@@ -3482,9 +3501,20 @@ struct StartHuntView: View {
     
     private func startHunt() {
         guard let enemyID = selectedEnemyID, !selectedMemberIDs.isEmpty else { return }
-        let hunt = ActiveHunt(enemyID: enemyID, memberIDs: Array(selectedMemberIDs), owner: user)
-        modelContext.insert(hunt)
-        user.activeHunts?.append(hunt)
+        // If a hunt for this enemy already exists, merge into it instead of creating duplicates
+        if let existing = user.activeHunts?.filter({ $0.enemyID == enemyID }), !existing.isEmpty {
+            // Merge selected members into the first existing hunt
+            if let primary = existing.first {
+                let combined = Set(primary.memberIDs).union(selectedMemberIDs)
+                primary.memberIDs = Array(combined)
+            }
+            // Also coalesce any additional duplicates for this enemy
+            GuildManager.shared.mergeDuplicateHunts(for: user, context: modelContext)
+        } else {
+            let hunt = ActiveHunt(enemyID: enemyID, memberIDs: Array(selectedMemberIDs), owner: user)
+            modelContext.insert(hunt)
+            user.activeHunts?.append(hunt)
+        }
         dismiss()
     }
     
@@ -3926,6 +3956,8 @@ struct HuntAllocationPlannerView: View {
             modelContext.insert(hunt)
             user.activeHunts?.append(hunt)
         }
+        // Coalesce any accidental duplicates into one per enemy
+        GuildManager.shared.mergeDuplicateHunts(for: user, context: modelContext)
         dismiss()
     }
 
