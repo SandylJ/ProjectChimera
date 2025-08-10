@@ -8,6 +8,7 @@ final class QuestManager {
 
     func initializeQuests(for user: User, context: ModelContext) {
         guard user.quests?.isEmpty ?? true else { return }
+        if user.quests == nil { user.quests = [] }
         for template in ItemDatabase.shared.masterQuestList {
             let newQuest = Quest(
                 id: template.id,

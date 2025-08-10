@@ -49,6 +49,9 @@ struct QuestsView: View {
         .sheet(isPresented: $showRewardPopup) {
             QuestRewardPopup(rewards: $lastQuestRewards, isPresented: $showRewardPopup)
         }
+        .onAppear {
+            QuestManager.shared.initializeQuests(for: user, context: modelContext)
+        }
     }
 
     private var header: some View {
@@ -185,6 +188,7 @@ struct QuestsView: View {
 
 // MARK: - Spectacular Quest Card
 private struct QuestCardSpectacular: View {
+    @Environment(\.modelContext) private var modelContext
     @Bindable var quest: Quest
     @Bindable var user: User
     var onPrimary: () -> Void
@@ -245,7 +249,10 @@ private struct QuestCardSpectacular: View {
                 HStack(spacing: 10) {
                     switch quest.status {
                     case .available:
-                        Button { quest.status = .active } label: { Text("Accept Quest") }
+                        Button {
+                            quest.status = .active
+                            try? modelContext.save()
+                        } label: { Text("Accept Quest") }
                             .buttonStyle(GlowButtonStyle())
                     case .active:
                         Chip(text: "In Progress")

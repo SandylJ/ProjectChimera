@@ -49,7 +49,20 @@ enum ExpeditionMode: String, Codable, CaseIterable {
 }
 
 enum LootReward: Codable, Hashable, Identifiable {
-    var id: UUID { UUID() }
+    var id: String {
+        switch self {
+        case .currency(let amount):
+            return "currency_\(amount)"
+        case .item(let id, let quantity):
+            return "item_\(id)_\(quantity)"
+        case .experienceBurst(let skill, let amount):
+            return "xp_\(skill.rawValue)_\(amount)"
+        case .runes(let amount):
+            return "runes_\(amount)"
+        case .echoes(let amount):
+            return "echoes_\(Int(amount))"
+        }
+    }
     case currency(Int)
     case item(id: String, quantity: Int)
     case experienceBurst(skill: SkillCategory, amount: Int)
@@ -427,7 +440,7 @@ final class Quest {
     }
     var owner: User?
     init(id: UUID = UUID(), title: String, description: String, type: QuestType, rewards: [LootReward], owner: User?) {
-        self.id = UUID(); self.title = title; self.questDescription = description; self.progress = 0
+        self.id = id; self.title = title; self.questDescription = description; self.progress = 0
         self.lastProgressDate = nil; self.owner = owner; self.type = type; self.rewards = rewards; self.status = .available
     }
     var objectiveDescription: String {
