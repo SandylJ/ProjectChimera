@@ -26,9 +26,9 @@ struct GlassCard<Content: View>: View {
                 .fill(GameTheme.panelFill)
             RoundedRectangle(cornerRadius: corner)
                 .stroke(GameTheme.panelStroke, lineWidth: 1)
+            content()
         }
         .background(.black.opacity(0.001))
-        .overlay(content())
     }
 }
 
