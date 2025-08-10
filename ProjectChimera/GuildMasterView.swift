@@ -485,9 +485,9 @@ struct ActiveHuntsCard: View {
             
             // Active hunts
             if let activeHunts = user.activeHunts, !activeHunts.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(activeHunts) { hunt in
-                        EnhancedHuntProgressRow(
+                        CompactHuntRow(
                             hunt: hunt,
                             user: user,
                             now: now,
@@ -649,16 +649,16 @@ struct UnclaimedRewardsSection: View {
     }
 }
 
-struct EnhancedHuntProgressRow: View {
+struct CompactHuntRow: View {
     let hunt: ActiveHunt
     let user: User
     let now: Date
     let onTap: () -> Void
-    
+
     private var enemyName: String {
         hunt.enemyID.replacingOccurrences(of: "enemy_", with: "").capitalized
     }
-    
+
     private var enemyIcon: String {
         switch hunt.enemyID {
         case "enemy_goblin": return "tortoise.fill"
@@ -670,7 +670,7 @@ struct EnhancedHuntProgressRow: View {
         default: return "sword.fill"
         }
     }
-    
+
     private var enemyColor: Color {
         switch hunt.enemyID {
         case "enemy_goblin": return .green
@@ -682,84 +682,57 @@ struct EnhancedHuntProgressRow: View {
         default: return .orange
         }
     }
-    
+
     private var killsPerSecond: Double {
         GuildManager.shared.calculateHuntKillsPerSecond(hunt: hunt, user: user)
     }
-    
+
     private var goldPerSecond: Double {
         Double(GuildManager.shared.adjustedGoldPerKill(for: hunt.enemyID)) * killsPerSecond
     }
-    
+
     private var timeSinceLastUpdate: TimeInterval {
-        return now.timeIntervalSince(hunt.lastUpdated)
+        now.timeIntervalSince(hunt.lastUpdated)
     }
-    
+
     private var estimatedKillsSinceLastUpdate: Int {
-        return Int(killsPerSecond * timeSinceLastUpdate)
+        Int(killsPerSecond * timeSinceLastUpdate)
     }
-    
+
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
-                // Enemy icon with pulsing animation
-                ZStack {
-                    Circle()
-                        .fill(enemyColor.opacity(0.3))
-                        .frame(width: 40, height: 40)
-                        .scaleEffect(1.0 + 0.1 * sin(now.timeIntervalSince1970 * 2))
-                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: now)
-                    
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
                     Image(systemName: enemyIcon)
-                        .font(.title2)
                         .foregroundColor(enemyColor)
-                }
-                .frame(width: 40, height: 40)
-                .background(enemyColor.opacity(0.2))
-                .cornerRadius(8)
-                
-                VStack(alignment: .leading, spacing: 4) {
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 16)
+
                     Text(enemyName)
-                        .font(.subheadline.bold())
+                        .font(.footnote.weight(.semibold))
                         .foregroundColor(.primary)
-                    
-                    HStack {
-                        Text("\(hunt.killsAccumulated + estimatedKillsSinceLastUpdate) kills")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .animation(.easeInOut(duration: 0.5), value: hunt.killsAccumulated + estimatedKillsSinceLastUpdate)
-                        
-                        Text("•")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("\(Int(killsPerSecond * 3600))/hr")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                            .animation(.easeInOut(duration: 0.5), value: killsPerSecond)
-                    }
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
+
+                    Spacer()
+
                     Text("\(hunt.memberIDs.count) hunters")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.secondary)
-                    
-                    Text("\(Int(goldPerSecond * 3600)) gold/hr")
-                        .font(.caption)
-                        .foregroundColor(.yellow)
-                        .animation(.easeInOut(duration: 0.5), value: goldPerSecond)
                 }
+
+                HStack(spacing: 6) {
+                    Text("\(hunt.killsAccumulated + estimatedKillsSinceLastUpdate) kills")
+                    Text("•")
+                    Text("\(Int(killsPerSecond * 3600))/hr")
+                        .foregroundColor(.green)
+                    Text("•")
+                    Text("\(Int(goldPerSecond * 3600)) gold/hr")
+                        .foregroundColor(.yellow)
+                }
+                .font(.caption2)
+                .foregroundColor(.secondary)
             }
-            .padding()
-            .background(Material.thin)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(enemyColor.opacity(0.3), lineWidth: 1)
-            )
+            .contentShape(Rectangle())
+            .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
     }
