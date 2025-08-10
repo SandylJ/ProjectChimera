@@ -65,6 +65,16 @@ final class SanctuaryManager: ObservableObject {
         } else {
             user.gold += 10 // Fallback
         }
+
+        // NEW: Progress any active harvest bounties
+        if let bounties = user.guildBounties {
+            for bounty in bounties where bounty.isActive {
+                if bounty.title.localizedCaseInsensitiveContains("harvest") {
+                    let remaining = max(0, bounty.requiredProgress - bounty.currentProgress)
+                    if remaining > 0 { bounty.currentProgress += 1 }
+                }
+            }
+        }
         
         // Delete the harvested item
         context.delete(plantedItem)

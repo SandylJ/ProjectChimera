@@ -956,6 +956,8 @@ struct EnhancedBountyCard: View {
 
     private var isComplete: Bool { bounty.currentProgress >= bounty.requiredProgress }
 
+    @State private var showStartHuntSheet: Bool = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -978,24 +980,61 @@ struct EnhancedBountyCard: View {
                     Button("Work +1") { bounty.currentProgress = min(bounty.currentProgress + 1, bounty.requiredProgress) }
                         .buttonStyle(.bordered)
                     if let target = bounty.targetEnemyID {
-                        Text("Target: \(target.replacingOccurrences(of: "enemy_", with: "").capitalized)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Button("Hunt Target") { showStartHuntSheet = true }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.red)
+                        roleHintsView(for: target)
                     }
-                    Spacer()
-                    Button("Track") { /* No-op for now; could set a tracking state */ }
-                        .buttonStyle(.bordered)
+                    Button("Reroll") {
+                        GuildManager.shared.rerollBounty(bounty, for: user, context: modelContext)
+                    }
+                    .buttonStyle(.bordered)
                 } else {
                     Button("Turn In") {
                         GuildManager.shared.completeBounty(bounty: bounty, for: user)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.green)
                 }
             }
         }
         .padding()
         .background(Material.regular)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .cornerRadius(12)
+        .sheet(isPresented: $showStartHuntSheet) {
+            if let target = bounty.targetEnemyID {
+                StartHuntView(user: user, modelContext: modelContext, prefillEnemyID: target)
+            }
+        }
+    }
+
+    private func roleHintsView(for enemyID: String) -> some View {
+        let mults = GuildManager.shared.getEnemyRoleMultipliers(enemyID)
+        let topArray = Array(mults.sorted { $0.value > $1.value }.prefix(2))
+        return HStack(spacing: 6) {
+            ForEach(Array(topArray.enumerated()), id: \.offset) { _, element in
+                let role = element.key
+                let mult = element.value
+                HStack(spacing: 4) {
+                    Image(systemName: iconName(for: role))
+                    Text("x\(String(format: "%.2f", mult))")
+                }
+                .font(.caption2)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.blue.opacity(0.12))
+                .cornerRadius(4)
+            }
+        }
+    }
+
+    private func iconName(for role: GuildMember.Role) -> String {
+        switch role {
+        case .knight: return "shield.fill"
+        case .archer: return "arrow.up.right"
+        case .wizard: return "sparkles"
+        case .rogue: return "bolt.fill"
+        case .cleric: return "cross.fill"
+        default: return "person.fill"
+        }
     }
 }

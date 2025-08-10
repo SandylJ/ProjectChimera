@@ -47,6 +47,16 @@ final class CraftingManager {
             let newItem = InventoryItem(itemID: recipe.craftedItemID, quantity: 1, owner: user)
             user.inventory?.append(newItem)
         }
+
+        // NEW: Progress any active crafting bounties
+        if let bounties = user.guildBounties {
+            for bounty in bounties where bounty.isActive {
+                if bounty.title.localizedCaseInsensitiveContains("craft") {
+                    let remaining = max(0, bounty.requiredProgress - bounty.currentProgress)
+                    if remaining > 0 { bounty.currentProgress += 1 }
+                }
+            }
+        }
     }
 }
 

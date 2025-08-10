@@ -69,6 +69,16 @@ final class GuildManager: ObservableObject {
             addItemToInventory(itemID: itemID, quantity: quantity, for: user)
         }
         
+        // NEW: Progress any active expedition bounties
+        if let bounties = user.guildBounties {
+            for bounty in bounties where bounty.isActive {
+                if bounty.title.localizedCaseInsensitiveContains("expedition") || bounty.title.localizedCaseInsensitiveContains("complete") {
+                    let remaining = max(0, bounty.requiredProgress - bounty.currentProgress)
+                    if remaining > 0 { bounty.currentProgress += 1 }
+                }
+            }
+        }
+
         // Free up members
         expedition.memberIDs.forEach { id in
             user.guildMembers?.first(where: { $0.id == id })?.isOnExpedition = false
@@ -171,17 +181,10 @@ final class GuildManager: ObservableObject {
     func generateDailyBounties(for user: User, context: ModelContext) {
         guard user.guildBounties?.isEmpty ?? true else { return }
         
-        let bounties = [
-            GuildBounty(title: "Defeat 10 Goblins", bountyDescription: "Hunt down goblins in the forest", requiredProgress: 10, guildXpReward: 100, guildSealReward: 10, owner: user, targetEnemyID: "enemy_goblin"),
-            GuildBounty(title: "Craft 5 Potions", bountyDescription: "Brew healing potions", requiredProgress: 5, guildXpReward: 150, guildSealReward: 15, owner: user),
-            GuildBounty(title: "Walk 5000 Steps", bountyDescription: "Stay active and explore", requiredProgress: 5000, guildXpReward: 75, guildSealReward: 8, owner: user)
-        ]
-        
+        var bounties: [GuildBounty] = []
+        for _ in 0..<3 { bounties.append(generateRandomBounty(for: user)) }
         user.guildBounties = bounties
-        
-        for bounty in bounties {
-            context.insert(bounty)
-        }
+        for bounty in bounties { context.insert(bounty) }
     }
     
     func completeBounty(bounty: GuildBounty, for user: User) {
@@ -195,6 +198,99 @@ final class GuildManager: ObservableObject {
         // Mark inactive and remove from list
         bounty.isActive = false
         user.guildBounties?.removeAll { $0.id == bounty.id }
+    }
+    
+    // MARK: - Bounty Generation & Reroll (NEW)
+
+    /// Generate a single random bounty themed around the player's current progression.
+    func generateRandomBounty(for user: User) -> GuildBounty {
+        // Weighted categories: combat, crafting, harvest, expedition
+        enum Category: CaseIterable { case combat, crafting, harvest, expedition }
+        let categories: [Category] = [.combat, .combat, .crafting, .harvest, .expedition]
+        let pick = categories.randomElement() ?? .combat
+        let guildLevel = user.guild?.level ?? 1
+
+        switch pick {
+        case .combat:
+            let enemies = [
+                ("Goblins", "enemy_goblin"),
+                ("Spiders", "enemy_spider"),
+                ("Zombies", "enemy_zombie"),
+                ("Skeletons", "enemy_skeleton"),
+                ("Wolves", "enemy_wolf"),
+                ("Ghosts", "enemy_ghost")
+            ]
+            let choice = enemies.randomElement() ?? ("Goblins", "enemy_goblin")
+            let required = 15 + (guildLevel * 3)
+            return GuildBounty(
+                title: "Defeat \(required) \(choice.0)",
+                bountyDescription: "Track and eliminate threats to the realm.",
+                requiredProgress: required,
+                guildXpReward: 120 + guildLevel * 10,
+                guildSealReward: 10 + guildLevel / 3,
+                owner: user,
+                targetEnemyID: choice.1
+            )
+        case .crafting:
+            let required = 3 + guildLevel / 5
+            return GuildBounty(
+                title: "Craft \(required) Items",
+                bountyDescription: "Support the guild by crafting useful gear or goods.",
+                requiredProgress: required,
+                guildXpReward: 90 + guildLevel * 8,
+                guildSealReward: 8 + guildLevel / 4,
+                owner: user
+            )
+        case .harvest:
+            let required = 6 + guildLevel / 2
+            return GuildBounty(
+                title: "Harvest \(required) Plants",
+                bountyDescription: "Gather harvests from your Sanctuary to supply the guild.",
+                requiredProgress: required,
+                guildXpReward: 80 + guildLevel * 6,
+                guildSealReward: 6 + guildLevel / 5,
+                owner: user
+            )
+        case .expedition:
+            let required = 1 + (guildLevel >= 10 ? 1 : 0)
+            return GuildBounty(
+                title: "Complete \(required) Expeditions",
+                bountyDescription: "Organize and complete guild expeditions.",
+                requiredProgress: required,
+                guildXpReward: 150 + guildLevel * 12,
+                guildSealReward: 12 + guildLevel / 3,
+                owner: user
+            )
+        }
+    }
+
+    /// Replace a single bounty for a seals cost.
+    func rerollBounty(_ bounty: GuildBounty, for user: User, context: ModelContext, sealCost: Int = 5) {
+        guard user.guildSeals >= sealCost else { return }
+        user.guildSeals -= sealCost
+        if let idx = user.guildBounties?.firstIndex(where: { $0.id == bounty.id }) {
+            // Remove old bounty
+            if let toDelete = user.guildBounties?[idx] { context.delete(toDelete) }
+            user.guildBounties?.remove(at: idx)
+        }
+        // Insert replacement
+        let replacement = generateRandomBounty(for: user)
+        context.insert(replacement)
+        user.guildBounties?.append(replacement)
+    }
+
+    /// Replace all current bounties for a flat seals cost.
+    func rerollAllBounties(for user: User, context: ModelContext, totalSealCost: Int = 10) {
+        guard user.guildSeals >= totalSealCost else { return }
+        user.guildSeals -= totalSealCost
+        // Delete existing
+        for b in (user.guildBounties ?? []) { context.delete(b) }
+        user.guildBounties?.removeAll()
+        // Generate three new
+        var fresh: [GuildBounty] = []
+        for _ in 0..<3 { fresh.append(generateRandomBounty(for: user)) }
+        for b in fresh { context.insert(b) }
+        user.guildBounties = fresh
     }
     
     // MARK: - Passive Hunts Processing (toned-down loot + guild XP + enemy modifiers)
@@ -225,6 +321,16 @@ final class GuildManager: ObservableObject {
             // Add slow Guild XP progression
             let xpGain = (newKills / 25) + Int(Double(newKills) * xpPerKill(for: hunt.enemyID))
             if xpGain > 0 { addGuildXP(xpGain, for: user) }
+            
+            // NEW: Auto-progress any active combat bounties targeting this enemy
+            if var bounties = user.guildBounties, !bounties.isEmpty {
+                for bounty in bounties where bounty.isActive && bounty.targetEnemyID == hunt.enemyID {
+                    let remaining = max(0, bounty.requiredProgress - bounty.currentProgress)
+                    if remaining > 0 {
+                        bounty.currentProgress += min(remaining, newKills)
+                    }
+                }
+            }
         }
     }
     

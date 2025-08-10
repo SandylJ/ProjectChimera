@@ -527,10 +527,11 @@ struct ActiveHuntsCard: View {
             }
         }
         .sheet(isPresented: $showingStartMenu) {
-            StartHuntView(user: user, modelContext: modelContext)
+            StartHuntView(user: user, modelContext: modelContext, prefillEnemyID: nil)
         }
         .onReceive(timer) { newDate in
             self.now = newDate
+            // Update in real-time
             GuildManager.shared.processHunts(for: user, deltaTime: 0.5, context: modelContext)
         }
     }
@@ -1968,12 +1969,14 @@ struct GuildStatRow: View {
 
 // MARK: - Bounties Tab
 struct GuildBountiesTab: View {
+    @Environment(\.modelContext) private var modelContext
     let user: User
     let activeBounties: [GuildBounty]
     
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                headerActions
                 if activeBounties.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "scroll")
@@ -1983,7 +1986,7 @@ struct GuildBountiesTab: View {
                         Text("No Active Bounties")
                             .font(.headline)
                         
-                        Text("Check back tomorrow for new bounties!")
+                        Text("Use Refresh Board to get new contracts.")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -1997,6 +2000,30 @@ struct GuildBountiesTab: View {
                 }
             }
             .padding()
+        }
+    }
+    
+    private var headerActions: some View {
+        HStack(spacing: 12) {
+            Button {
+                // Claim all completed
+                for b in activeBounties where b.currentProgress >= b.requiredProgress && b.isActive {
+                    GuildManager.shared.completeBounty(bounty: b, for: user)
+                }
+            } label: {
+                Label("Claim All Completed", systemImage: "tray.and.arrow.down.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            
+            Button {
+                GuildManager.shared.rerollAllBounties(for: user, context: modelContext)
+            } label: {
+                Label("Refresh Board (10)", systemImage: "arrow.clockwise.circle")
+            }
+            .buttonStyle(.bordered)
+            .tint(.orange)
+            Spacer()
         }
     }
 }
@@ -3210,6 +3237,7 @@ struct StartHuntView: View {
     
     @State private var selectedEnemyID: String? = nil
     @State private var selectedMemberIDs: Set<UUID> = []
+    let prefillEnemyID: String?
     
     private var guildLevel: Int { user.guild?.level ?? 1 }
     
@@ -3247,6 +3275,24 @@ struct StartHuntView: View {
         return GuildManager.shared.calculateHuntKillsPerSecond(hunt: tempHunt, user: user)
     }
     
+    private func suggestMembers(for enemyID: String) -> Set<UUID> {
+        let mults = GuildManager.shared.getEnemyRoleMultipliers(enemyID)
+        let scored = availableCombatants.map { member -> (GuildMember, Double) in
+            let roleMult = mults[member.role] ?? 1.0
+            let score = member.combatDPS() * roleMult
+            return (member, score)
+        }
+        // Favor including one cleric if available for team buff
+        var sorted = scored.sorted { $0.1 > $1.1 }
+        var picks: [GuildMember] = []
+        if let cleric = availableCombatants.first(where: { $0.role == .cleric }) {
+            picks.append(cleric)
+            sorted.removeAll { $0.0.id == cleric.id }
+        }
+        for (member, _) in sorted.prefix(3 - picks.count) { picks.append(member) }
+        return Set(picks.map { $0.id })
+    }
+    
     private var enemySelectionView: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose Target")
@@ -3265,6 +3311,8 @@ struct StartHuntView: View {
                             .foregroundColor(.secondary)
                         Button(selectedEnemyID == enemy.id ? "Selected" : "Select") {
                             selectedEnemyID = enemy.id
+                            // Update suggested members on selection
+                            selectedMemberIDs = suggestMembers(for: enemy.id)
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -3371,6 +3419,12 @@ struct StartHuntView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
+            }
+        }
+        .onAppear {
+            if let prefill = prefillEnemyID, selectedEnemyID == nil {
+                selectedEnemyID = prefill
+                selectedMemberIDs = suggestMembers(for: prefill)
             }
         }
     }
