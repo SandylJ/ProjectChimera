@@ -123,6 +123,7 @@ struct ProgressBar: View {
 
 struct GlowButtonStyle: ButtonStyle {
     var gradient: LinearGradient = GameTheme.okGradient
+    var animatedSheen: Bool = true
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(.headline, design: .rounded))
@@ -136,7 +137,16 @@ struct GlowButtonStyle: ButtonStyle {
             )
             .shadow(color: .black.opacity(0.4), radius: 18, y: 10)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .overlay(AnimatedSheen().clipShape(RoundedRectangle(cornerRadius: 18)))
+            .overlay(
+                Group {
+                    if animatedSheen {
+                        AnimatedSheen()
+                    } else {
+                        StaticSheen()
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+            )
     }
 }
 
@@ -157,6 +167,20 @@ struct AnimatedSheen: View {
         }
         .blendMode(.screen)
         .opacity(0.5)
+    }
+}
+
+struct StaticSheen: View {
+    var body: some View {
+        LinearGradient(stops: [
+            .init(color: .white.opacity(0.0), location: 0.0),
+            .init(color: .white.opacity(0.25), location: 0.5),
+            .init(color: .white.opacity(0.0), location: 1.0)
+        ], startPoint: .top, endPoint: .bottom)
+        .frame(width: 40)
+        .offset(x: 0)
+        .blendMode(.screen)
+        .opacity(0.18)
     }
 }
 
