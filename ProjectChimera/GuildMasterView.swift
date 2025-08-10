@@ -1523,6 +1523,9 @@ struct RoleGroupCard: View {
         case .alchemist: return .orange
         case .seer: return .indigo
         case .blacksmith: return .red
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
     
@@ -1538,6 +1541,9 @@ struct RoleGroupCard: View {
         case .alchemist: return "flask.fill"
         case .seer: return "eye.fill"
         case .blacksmith: return "hammer.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
     
@@ -1637,6 +1643,9 @@ struct HireMemberCard: View {
         case .alchemist: return "flask.fill"
         case .seer: return "eye.fill"
         case .blacksmith: return "hammer.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
 }
@@ -1773,6 +1782,9 @@ struct GuildMemberRow: View {
         case .alchemist: return .orange
         case .seer: return .indigo
         case .blacksmith: return .red
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
     
@@ -1788,6 +1800,9 @@ struct GuildMemberRow: View {
         case .alchemist: return "flask.fill"
         case .seer: return "eye.fill"
         case .blacksmith: return "hammer.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
 }
@@ -1902,6 +1917,9 @@ struct GuildMemberDetailView: View {
         case .alchemist: return .orange
         case .seer: return .indigo
         case .blacksmith: return .red
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
     
@@ -1917,6 +1935,9 @@ struct GuildMemberDetailView: View {
         case .alchemist: return "flask.fill"
         case .seer: return "eye.fill"
         case .blacksmith: return "hammer.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
 }
@@ -2420,6 +2441,9 @@ struct ActiveExpeditionCard: View {
         case .wizard: return "sparkles"
         case .rogue: return "bolt.fill"
         case .cleric: return "cross.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
     
@@ -2431,6 +2455,9 @@ struct ActiveExpeditionCard: View {
         case .knight, .cleric: return .blue
         case .archer, .rogue: return .gray
         case .wizard: return .indigo
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
     
@@ -2644,6 +2671,9 @@ struct AvailableExpeditionCard: View {
         case .knight, .cleric: return .blue
         case .archer, .rogue: return .gray
         case .wizard: return .indigo
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
 }
@@ -2844,6 +2874,9 @@ struct ExpeditionDetailView: View {
         case .wizard: return "sparkles"
         case .rogue: return "bolt.fill"
         case .cleric: return "cross.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
     
@@ -2855,6 +2888,9 @@ struct ExpeditionDetailView: View {
         case .knight, .cleric: return .blue
         case .archer, .rogue: return .gray
         case .wizard: return .indigo
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
 }
@@ -2997,6 +3033,9 @@ struct WorkerRoleCard: View {
         case .wizard: return "sparkles"
         case .rogue: return "bolt.fill"
         case .cleric: return "cross.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
     
@@ -3008,6 +3047,9 @@ struct WorkerRoleCard: View {
         case .knight, .cleric: return .blue
         case .archer, .rogue: return .gray
         case .wizard: return .indigo
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
 }
@@ -3064,6 +3106,9 @@ struct MemberSelectionCard: View {
         case .wizard: return "sparkles"
         case .rogue: return "bolt.fill"
         case .cleric: return "cross.fill"
+        case .leatherworker: return "scissors"
+        case .weaver: return "square.fill.on.square.fill"
+        case .spinner: return "circle"
         }
     }
     
@@ -3075,6 +3120,9 @@ struct MemberSelectionCard: View {
         case .knight, .cleric: return .blue
         case .archer, .rogue: return .gray
         case .wizard: return .indigo
+        case .leatherworker: return .brown
+        case .weaver: return .teal
+        case .spinner: return .cyan
         }
     }
 }
@@ -3503,7 +3551,7 @@ struct GuildPerksCard: View {
 extension GuildMember.Role {
     var hasSpecialAbility: Bool {
         switch self {
-        case .forager, .gardener, .alchemist, .seer, .blacksmith:
+        case .forager, .gardener, .alchemist, .seer, .blacksmith, .leatherworker, .weaver, .spinner:
             return true
         default:
             return false
@@ -3522,6 +3570,12 @@ extension GuildMember.Role {
             return "Boosts echoes"
         case .blacksmith:
             return "Crafts items"
+        case .leatherworker:
+            return "Tans hides into leather"
+        case .weaver:
+            return "Weaves linen"
+        case .spinner:
+            return "Spins flax"
         default:
             return ""
         }
@@ -3538,7 +3592,7 @@ extension GuildMember.Role {
     
     var isGathererRole: Bool {
         switch self {
-        case .forager, .gardener, .alchemist, .seer, .blacksmith:
+        case .forager, .gardener, .alchemist, .seer, .blacksmith, .leatherworker, .weaver, .spinner:
             return true
         default:
             return false

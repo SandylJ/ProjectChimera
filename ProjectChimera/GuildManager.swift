@@ -515,4 +515,64 @@ final class GuildManager: ObservableObject {
         if let anySeed = ItemDatabase.shared.getAllPlantables().first?.id { return anySeed }
         return nil
     }
+
+    // MARK: - Passive Crafting Production (NEW)
+    func processCrafting(for user: User, deltaTime: TimeInterval) {
+        guard deltaTime > 0 else { return }
+
+        // Production configuration per role
+        let productionMap: [(role: GuildMember.Role, itemID: String, baseSecondsPerItem: Double)] = [
+            (.leatherworker, "material_tanned_leather", 300), // 5 min per base worker
+            (.spinner, "material_spun_flax", 180),            // 3 min per base worker
+            (.weaver, "material_linen", 420)                  // 7 min per base worker
+        ]
+
+        var progress = user.craftingProgress
+
+        for entry in productionMap {
+            let workers = (user.guildMembers ?? []).filter { $0.role == entry.role }
+            guard !workers.isEmpty else { continue }
+
+            // Sum item/s across workers using level scaling: faster by 10% per level beyond 1
+            let itemsPerSecond: Double = workers.reduce(0.0) { partial, member in
+                let speedMultiplier = 1.0 + 0.1 * Double(max(0, member.level - 1))
+                let secondsPerItem = max(10.0, entry.baseSecondsPerItem / speedMultiplier)
+                return partial + (1.0 / secondsPerItem)
+            }
+
+            let key = entry.role.rawValue.lowercased()
+            let newValue = (progress[key] ?? 0.0) + itemsPerSecond * deltaTime
+            progress[key] = newValue
+
+            // Convert whole numbers into produced items
+            let wholeItems = Int(newValue)
+            if wholeItems > 0 {
+                addUnclaimedCraftedItem(itemID: entry.itemID, quantity: wholeItems, for: user)
+                progress[key] = newValue - Double(wholeItems)
+            }
+        }
+
+        user.craftingProgress = progress
+    }
+
+    private func addUnclaimedCraftedItem(itemID: String, quantity: Int, for user: User) {
+        if let existing = user.unclaimedCraftedItems.first(where: { $0.itemID == itemID }) {
+            existing.quantity += quantity
+        } else {
+            let newItem = UnclaimedCraftedItem(itemID: itemID, quantity: quantity, owner: user)
+            user.unclaimedCraftedItems.append(newItem)
+        }
+    }
+
+    func claimCraftedItems(for user: User) {
+        guard !user.unclaimedCraftedItems.isEmpty else { return }
+        for item in user.unclaimedCraftedItems {
+            if let inv = user.inventory?.first(where: { $0.itemID == item.itemID }) {
+                inv.quantity += item.quantity
+            } else {
+                user.inventory?.append(InventoryItem(itemID: item.itemID, quantity: item.quantity, owner: user))
+            }
+        }
+        user.unclaimedCraftedItems.removeAll()
+    }
 }

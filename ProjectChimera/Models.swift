@@ -203,6 +203,15 @@ final class User {
     var teamPoints: Int = 0
     var eggs: [HatchableEgg]? = []
     var activeHunts: [ActiveHunt]? = []
+    // Crafted items accumulated passively by crafting workers
+    var unclaimedCraftedItems: [UnclaimedCraftedItem] = []
+
+    // Track crafting progress per role (e.g., "leatherworker", "weaver", "spinner")
+    private var craftingProgressData: Data = Data()
+    var craftingProgress: [String: Double] {
+        get { (try? JSONDecoder().decode([String: Double].self, from: craftingProgressData)) ?? [:] }
+        set { craftingProgressData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
 
     // --- NEW: Guild Automation ---
     private var guildAutomationData: Data = Data()
@@ -233,6 +242,8 @@ final class User {
         self.activeExpeditions = []; self.willpower = 0; self.statues = []; self.quests = []
         self.runes = 5; self.isDoubleXpNextTask = false; self.unlockedSpellIDs = []; self.activeBuffs = [:]
         self.unclaimedHuntGold = 0
+        self.unclaimedCraftedItems = []
+        self.craftingProgress = [:]
         // Initialize automation
         self.guildAutomation = GuildAutomationSettings.defaultSettings
         self.automationProgressForager = 0.0
@@ -545,6 +556,7 @@ final class GuildMember {
     var xp: Int; var isOnExpedition: Bool; var owner: User?
     enum Role: String, Codable, CaseIterable {
         case forager = "Forager", gardener = "Gardener", alchemist = "Alchemist", seer = "Seer", blacksmith = "Blacksmith"
+        case leatherworker = "Leatherworker", weaver = "Weaver", spinner = "Spinner"
         case knight = "Knight", archer = "Archer", wizard = "Wizard", rogue = "Rogue", cleric = "Cleric"
     }
     init(name: String, role: Role, owner: User?) {
@@ -558,6 +570,9 @@ final class GuildMember {
         case .alchemist: return "Periodically transmutes materials or brews simple potions."
         case .seer: return "Boosts the Altar of Whispers' Echo generation."
         case .blacksmith: return "Specializes in crafting and enhancing equipment."
+        case .leatherworker: return "Tans hides into premium leathers over time."
+        case .weaver: return "Weaves fine linen from gathered fibers passively."
+        case .spinner: return "Spins raw flax into quality threads continuously."
         case .knight: return "Frontline fighter with steady damage and durability."
         case .archer: return "Ranged attacker with high single-target damage."
         case .wizard: return "Caster that deals bursty magic damage."
@@ -572,6 +587,9 @@ final class GuildMember {
         case .alchemist: return "Every hour, has a \(self.level * 2)% chance to create a potion."
         case .seer: return "Increases Echo generation by \(self.level * 10)%."
         case .blacksmith: return "Can craft materials or enhance equipped items."
+        case .leatherworker: return "Produces Tanned Leather at an increasing pace with level."
+        case .weaver: return "Produces Linen over time; higher level means faster output."
+        case .spinner: return "Produces Spun Flax passively; level reduces craft time."
         case .knight: return "Contributes ~\(Int(combatDPS())) DPS to hunts."
         case .archer: return "Contributes ~\(Int(combatDPS())) DPS to hunts."
         case .wizard: return "Contributes ~\(Int(combatDPS())) DPS to hunts."
@@ -788,4 +806,19 @@ struct GameData {
     }
 
     func getEnemy(id: String) -> Enemy? { enemies.first { $0.id == id } }
+}
+
+@Model
+final class UnclaimedCraftedItem {
+    var id: UUID
+    var itemID: String
+    var quantity: Int
+    var owner: User?
+    
+    init(itemID: String, quantity: Int, owner: User?) {
+        self.id = UUID()
+        self.itemID = itemID
+        self.quantity = quantity
+        self.owner = owner
+    }
 }

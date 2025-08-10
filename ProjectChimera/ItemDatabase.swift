@@ -320,7 +320,12 @@ private extension ItemDatabase {
             Item(id: "material_dream_shard", name: "Dream Shard", description: "A fragment of a forgotten dream, humming with potential.", itemType: .material, rarity: .rare, icon: "moon.stars.fill", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil),
             Item(id: "material_sunwheat_grain", name: "Sun-Kissed Grain", description: "A warm, golden grain of wheat.", itemType: .material, rarity: .common, icon: "leaf.fill", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil),
             Item(id: "material_glowcap_spore", name: "Glowcap Spore", description: "A faintly glowing mushroom spore.", itemType: .material, rarity: .rare, icon: "circle.grid.3x3.fill", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil),
-            Item(id: "material_ironwood_bark", name: "Ironwood Bark", description: "Remarkably tough bark from the legendary Ironwood tree.", itemType: .material, rarity: .epic, icon: "tree.fill", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil)
+            Item(id: "material_ironwood_bark", name: "Ironwood Bark", description: "Remarkably tough bark from the legendary Ironwood tree.", itemType: .material, rarity: .epic, icon: "tree.fill", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil),
+
+            // --- New Crafting Chain Materials ---
+            Item(id: "material_tanned_leather", name: "Tanned Leather", description: "Leather processed by skilled hands, ready for crafting.", itemType: .material, rarity: .common, icon: "scissors", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil),
+            Item(id: "material_spun_flax", name: "Spun Flax", description: "Flax fibers spun into thread.", itemType: .material, rarity: .common, icon: "circle", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil),
+            Item(id: "material_linen", name: "Linen", description: "Fine linen woven from spun flax.", itemType: .material, rarity: .common, icon: "square", plantableType: nil, consumableEffect: nil, growTime: nil, harvestReward: nil, slot: nil, bonuses: nil)
         ]
     }
 
