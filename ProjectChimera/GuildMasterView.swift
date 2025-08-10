@@ -2144,7 +2144,6 @@ struct GuildExpeditionsTab: View {
     let modelContext: ModelContext
     @State private var selectedExpedition: Expedition?
     @State private var selectedMembers: Set<UUID> = []
-    @State private var showingExpeditionDetails = false
     @State private var showingActiveExpeditions = false
     @State private var now = Date()
     
@@ -2179,7 +2178,6 @@ struct GuildExpeditionsTab: View {
                     mode: .combat,
                     onExpeditionSelected: { expedition in
                         selectedExpedition = expedition
-                        showingExpeditionDetails = true
                     }
                 )
                 
@@ -2191,22 +2189,21 @@ struct GuildExpeditionsTab: View {
             }
             .padding()
         }
-        .sheet(isPresented: $showingExpeditionDetails) {
-            if let expedition = selectedExpedition {
-                ExpeditionDetailView(
-                    expedition: expedition,
-                    availableMembers: availableMembers,
-                    onLaunch: { selectedMembers in
-                        GuildManager.shared.launchExpedition(
-                            expeditionID: expedition.id,
-                            with: Array(selectedMembers),
-                            for: user,
-                            context: modelContext
-                        )
-                        showingExpeditionDetails = false
-                    }
-                )
-            }
+        .sheet(item: $selectedExpedition) { expedition in
+            ExpeditionDetailView(
+                expedition: expedition,
+                availableMembers: availableMembers,
+                onLaunch: { selectedMembers in
+                    GuildManager.shared.launchExpedition(
+                        expeditionID: expedition.id,
+                        with: Array(selectedMembers),
+                        for: user,
+                        context: modelContext
+                    )
+                    // Dismiss the sheet reliably
+                    selectedExpedition = nil
+                }
+            )
         }
         .onAppear {
             // Check for completed expeditions
@@ -2415,6 +2412,16 @@ struct ActiveExpeditionCard: View {
                         .background(Color.green.opacity(0.2))
                         .cornerRadius(4)
                     }
+                }
+            } else {
+                // Fallback when data missing: avoid blank segment
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Rewards:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Unknown rewards for this expedition.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -2743,6 +2750,49 @@ struct ExpeditionDetailView: View {
         return ids
     }
     
+    // NEW: Heuristic success meter based on matching roles and member levels
+    private var successScore: Int {
+        var score = 0
+        // Role matching gives base points
+        if let req = expedition.requiredRoles {
+            for role in req { if selectedQuantities[role, default: 0] > 0 { score += 25 } }
+        }
+        // Extra members beyond minimum add diminishing bonus
+        let extra = max(0, totalSelectedMembers - expedition.minMembers)
+        score += min(30, extra * 10)
+        // Average level contribution
+        let allSelected = selectedMemberIDs.compactMap { id in availableMembers.first { $0.id == id } }
+        if !allSelected.isEmpty {
+            let avgLevel = Double(allSelected.reduce(0) { $0 + $1.level }) / Double(allSelected.count)
+            score += min(45, Int(avgLevel * 3))
+        }
+        return min(100, score)
+    }
+    private var successColor: Color { successScore >= 75 ? .green : (successScore >= 50 ? .yellow : .orange) }
+    
+    private func quickFillRecommended() {
+        // Ensure we try to meet required roles first
+        selectedQuantities = [:]
+        if let req = expedition.requiredRoles {
+            for role in req {
+                let count = min(1, groupedMembers[role]?.count ?? 0)
+                if count > 0 { selectedQuantities[role] = count }
+            }
+        }
+        // Fill up to min members with highest-level remaining available members
+        let current = totalSelectedMembers
+        if current < expedition.minMembers {
+            let needed = expedition.minMembers - current
+            let remaining: [GuildMember] = availableMembers.filter { m in
+                let used = selectedMemberIDs.contains(m.id)
+                return !used
+            }.sorted { $0.level > $1.level }
+            for member in remaining.prefix(needed) {
+                selectedQuantities[member.role, default: 0] += 1
+            }
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ScrollView {
@@ -2764,6 +2814,20 @@ struct ExpeditionDetailView: View {
                         }
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        
+                        // NEW: Success Meter and Quick Actions
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Estimated Success: \(successScore)%")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(successColor)
+                                Spacer()
+                                Button("Recommend Team") { quickFillRecommended() }
+                                    .buttonStyle(.bordered)
+                            }
+                            ProgressView(value: Double(successScore), total: 100)
+                                .tint(successColor)
+                        }
                     }
                     .padding()
                     .background(Material.regular)
@@ -2859,6 +2923,10 @@ struct ExpeditionDetailView: View {
                     .disabled(!canLaunch)
                 }
             }
+        }
+        .onAppear {
+            // Auto-recommend on open for smoother UX
+            if totalSelectedMembers == 0 { quickFillRecommended() }
         }
     }
     
