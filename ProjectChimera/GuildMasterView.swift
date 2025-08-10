@@ -534,13 +534,14 @@ struct ActiveHuntsCard: View {
             }
         }
         .sheet(isPresented: $showingStartMenu) {
-            StartHuntView(user: user, modelContext: modelContext)
+            StartHuntView(user: user, modelContext: modelContext, prefillEnemyID: nil)
         }
         .sheet(isPresented: $showingAllocationPlanner) {
             HuntAllocationPlannerView(user: user, modelContext: modelContext)
         }
         .onReceive(timer) { newDate in
             self.now = newDate
+            // Update in real-time
             GuildManager.shared.processHunts(for: user, deltaTime: 0.5, context: modelContext)
         }
     }
@@ -1978,12 +1979,14 @@ struct GuildStatRow: View {
 
 // MARK: - Bounties Tab
 struct GuildBountiesTab: View {
+    @Environment(\.modelContext) private var modelContext
     let user: User
     let activeBounties: [GuildBounty]
     
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                headerActions
                 if activeBounties.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "scroll")
@@ -1993,7 +1996,7 @@ struct GuildBountiesTab: View {
                         Text("No Active Bounties")
                             .font(.headline)
                         
-                        Text("Check back tomorrow for new bounties!")
+                        Text("Use Refresh Board to get new contracts.")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -2007,6 +2010,30 @@ struct GuildBountiesTab: View {
                 }
             }
             .padding()
+        }
+    }
+    
+    private var headerActions: some View {
+        HStack(spacing: 12) {
+            Button {
+                // Claim all completed
+                for b in activeBounties where b.currentProgress >= b.requiredProgress && b.isActive {
+                    GuildManager.shared.completeBounty(bounty: b, for: user)
+                }
+            } label: {
+                Label("Claim All Completed", systemImage: "tray.and.arrow.down.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            
+            Button {
+                GuildManager.shared.rerollAllBounties(for: user, context: modelContext)
+            } label: {
+                Label("Refresh Board (10)", systemImage: "arrow.clockwise.circle")
+            }
+            .buttonStyle(.bordered)
+            .tint(.orange)
+            Spacer()
         }
     }
 }
@@ -2127,7 +2154,6 @@ struct GuildExpeditionsTab: View {
     let modelContext: ModelContext
     @State private var selectedExpedition: Expedition?
     @State private var selectedMembers: Set<UUID> = []
-    @State private var showingExpeditionDetails = false
     @State private var showingActiveExpeditions = false
     @State private var now = Date()
     
@@ -2162,7 +2188,6 @@ struct GuildExpeditionsTab: View {
                     mode: .combat,
                     onExpeditionSelected: { expedition in
                         selectedExpedition = expedition
-                        showingExpeditionDetails = true
                     }
                 )
                 
@@ -2174,22 +2199,21 @@ struct GuildExpeditionsTab: View {
             }
             .padding()
         }
-        .sheet(isPresented: $showingExpeditionDetails) {
-            if let expedition = selectedExpedition {
-                ExpeditionDetailView(
-                    expedition: expedition,
-                    availableMembers: availableMembers,
-                    onLaunch: { selectedMembers in
-                        GuildManager.shared.launchExpedition(
-                            expeditionID: expedition.id,
-                            with: Array(selectedMembers),
-                            for: user,
-                            context: modelContext
-                        )
-                        showingExpeditionDetails = false
-                    }
-                )
-            }
+        .sheet(item: $selectedExpedition) { expedition in
+            ExpeditionDetailView(
+                expedition: expedition,
+                availableMembers: availableMembers,
+                onLaunch: { selectedMembers in
+                    GuildManager.shared.launchExpedition(
+                        expeditionID: expedition.id,
+                        with: Array(selectedMembers),
+                        for: user,
+                        context: modelContext
+                    )
+                    // Dismiss the sheet reliably
+                    selectedExpedition = nil
+                }
+            )
         }
         .onAppear {
             // Check for completed expeditions
@@ -2398,6 +2422,16 @@ struct ActiveExpeditionCard: View {
                         .background(Color.green.opacity(0.2))
                         .cornerRadius(4)
                     }
+                }
+            } else {
+                // Fallback when data missing: avoid blank segment
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Rewards:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Unknown rewards for this expedition.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
         }
@@ -2726,6 +2760,49 @@ struct ExpeditionDetailView: View {
         return ids
     }
     
+    // NEW: Heuristic success meter based on matching roles and member levels
+    private var successScore: Int {
+        var score = 0
+        // Role matching gives base points
+        if let req = expedition.requiredRoles {
+            for role in req { if selectedQuantities[role, default: 0] > 0 { score += 25 } }
+        }
+        // Extra members beyond minimum add diminishing bonus
+        let extra = max(0, totalSelectedMembers - expedition.minMembers)
+        score += min(30, extra * 10)
+        // Average level contribution
+        let allSelected = selectedMemberIDs.compactMap { id in availableMembers.first { $0.id == id } }
+        if !allSelected.isEmpty {
+            let avgLevel = Double(allSelected.reduce(0) { $0 + $1.level }) / Double(allSelected.count)
+            score += min(45, Int(avgLevel * 3))
+        }
+        return min(100, score)
+    }
+    private var successColor: Color { successScore >= 75 ? .green : (successScore >= 50 ? .yellow : .orange) }
+    
+    private func quickFillRecommended() {
+        // Ensure we try to meet required roles first
+        selectedQuantities = [:]
+        if let req = expedition.requiredRoles {
+            for role in req {
+                let count = min(1, groupedMembers[role]?.count ?? 0)
+                if count > 0 { selectedQuantities[role] = count }
+            }
+        }
+        // Fill up to min members with highest-level remaining available members
+        let current = totalSelectedMembers
+        if current < expedition.minMembers {
+            let needed = expedition.minMembers - current
+            let remaining: [GuildMember] = availableMembers.filter { m in
+                let used = selectedMemberIDs.contains(m.id)
+                return !used
+            }.sorted { $0.level > $1.level }
+            for member in remaining.prefix(needed) {
+                selectedQuantities[member.role, default: 0] += 1
+            }
+        }
+    }
+    
     var body: some View {
         NavigationView {
             ScrollView {
@@ -2747,6 +2824,20 @@ struct ExpeditionDetailView: View {
                         }
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        
+                        // NEW: Success Meter and Quick Actions
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Estimated Success: \(successScore)%")
+                                    .font(.subheadline.bold())
+                                    .foregroundColor(successColor)
+                                Spacer()
+                                Button("Recommend Team") { quickFillRecommended() }
+                                    .buttonStyle(.bordered)
+                            }
+                            ProgressView(value: Double(successScore), total: 100)
+                                .tint(successColor)
+                        }
                     }
                     .padding()
                     .background(Material.regular)
@@ -2842,6 +2933,10 @@ struct ExpeditionDetailView: View {
                     .disabled(!canLaunch)
                 }
             }
+        }
+        .onAppear {
+            // Auto-recommend on open for smoother UX
+            if totalSelectedMembers == 0 { quickFillRecommended() }
         }
     }
     
@@ -3220,6 +3315,7 @@ struct StartHuntView: View {
     
     @State private var selectedEnemyID: String? = nil
     @State private var selectedMemberIDs: Set<UUID> = []
+    let prefillEnemyID: String?
     
     private var guildLevel: Int { user.guild?.level ?? 1 }
     
@@ -3257,6 +3353,24 @@ struct StartHuntView: View {
         return GuildManager.shared.calculateHuntKillsPerSecond(hunt: tempHunt, user: user)
     }
     
+    private func suggestMembers(for enemyID: String) -> Set<UUID> {
+        let mults = GuildManager.shared.getEnemyRoleMultipliers(enemyID)
+        let scored = availableCombatants.map { member -> (GuildMember, Double) in
+            let roleMult = mults[member.role] ?? 1.0
+            let score = member.combatDPS() * roleMult
+            return (member, score)
+        }
+        // Favor including one cleric if available for team buff
+        var sorted = scored.sorted { $0.1 > $1.1 }
+        var picks: [GuildMember] = []
+        if let cleric = availableCombatants.first(where: { $0.role == .cleric }) {
+            picks.append(cleric)
+            sorted.removeAll { $0.0.id == cleric.id }
+        }
+        for (member, _) in sorted.prefix(3 - picks.count) { picks.append(member) }
+        return Set(picks.map { $0.id })
+    }
+    
     private var enemySelectionView: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose Target")
@@ -3275,6 +3389,8 @@ struct StartHuntView: View {
                             .foregroundColor(.secondary)
                         Button(selectedEnemyID == enemy.id ? "Selected" : "Select") {
                             selectedEnemyID = enemy.id
+                            // Update suggested members on selection
+                            selectedMemberIDs = suggestMembers(for: enemy.id)
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
@@ -3381,6 +3497,12 @@ struct StartHuntView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
+            }
+        }
+        .onAppear {
+            if let prefill = prefillEnemyID, selectedEnemyID == nil {
+                selectedEnemyID = prefill
+                selectedMemberIDs = suggestMembers(for: prefill)
             }
         }
     }
