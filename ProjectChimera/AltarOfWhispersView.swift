@@ -37,11 +37,14 @@ struct AltarOfWhispersView: View {
                     if let altar = altar {
                         statsView(altar: altar)
                         upgradesView(altar: altar)
+                        courtesiesView(altar: altar)
                         ritualsView(altar: altar)
                     } else {
                         Text("The Altar is dormant. Return later.")
                             .font(.subheadline)
                             .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
                 }
                 .padding()
@@ -162,6 +165,69 @@ struct AltarOfWhispersView: View {
         }
     }
 
+    // MARK: - Courtesies
+    private func courtesiesView(altar: AltarOfWhispers) -> some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("Whisper Courtesies")
+                .font(.title2.bold())
+                .foregroundColor(.white)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                courtesyRow(
+                    key: "echo_flow",
+                    title: "Echo Flow",
+                    description: "+5% global Echoes per level.",
+                    baseCost: 150
+                )
+                courtesyRow(
+                    key: "garden_whispers",
+                    title: "Garden Whispers",
+                    description: "Plants grow 10% faster per level.",
+                    baseCost: 200
+                )
+                courtesyRow(
+                    key: "expedition_echo_kickback",
+                    title: "Echo Kickback",
+                    description: "+2 Echoes per party member on expedition completion per level.",
+                    baseCost: 180
+                )
+                courtesyRow(
+                    key: "shop_patron",
+                    title: "Patron of the Bazaar",
+                    description: "Shop chest costs reduced by 5% per level (max 50%).",
+                    baseCost: 250
+                )
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    private func courtesyRow(key: String, title: String, description: String, baseCost: Double) -> some View {
+        let level = user.altarCourtesies[key] ?? 0
+        let cost = baseCost * pow(2.0, Double(level))
+        let canAfford = (altar?.echoes ?? 0.0) >= cost
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack { Text(title).font(.headline); Spacer(); Text("Lvl. \(level)").font(.headline).foregroundColor(.secondary) }
+            Text(description).font(.caption).foregroundColor(.secondary)
+            Button(action: {
+                guard let altar = altar, altar.echoes >= cost else { return }
+                altar.echoes -= cost
+                var map = user.altarCourtesies
+                map[key] = level + 1
+                user.altarCourtesies = map
+            }) {
+                HStack { Image(systemName: "hands.sparkles"); Text(String(format: "Bestow (%.0f Echoes)", cost)) }.frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(canAfford ? .cyan : .gray)
+            .disabled(!canAfford)
+        }
+        .padding()
+        .background(Material.regular)
+        .cornerRadius(15)
+    }
+
     // MARK: - Rituals
     private func ritualsView(altar: AltarOfWhispers) -> some View {
         VStack(alignment: .leading, spacing: 15) {
@@ -184,6 +250,18 @@ struct AltarOfWhispersView: View {
                     let duration: TimeInterval = 600
                     let expiry = Date().addingTimeInterval(duration)
                     user.activeBuffs[surge] = expiry
+                }
+
+                // Whisper Cache: random courtesy materials from garden/inventory for echoes
+                ritualRow(
+                    title: "Whisper Cache",
+                    description: "Offer 3 random materials to gain 60 Echoes.",
+                    costText: "Cost: 3 materials",
+                    canAfford: hasAtLeastNMaterials(3)
+                ) {
+                    if consumeMaterials(3) {
+                        altar.echoes += 60
+                    }
                 }
 
                 // Transmute Echoes -> Gold
@@ -224,6 +302,32 @@ struct AltarOfWhispersView: View {
                         user.willpower += 50
                     }
                 }
+
+                // Offer Gold for Echoes
+                ritualRow(
+                    title: "Golden Offering",
+                    description: "Tithe 1,000 Gold to gain 80 Echoes.",
+                    costText: "Cost: 1000 Gold",
+                    canAfford: user.gold >= 1000
+                ) {
+                    if user.gold >= 1000 {
+                        user.gold -= 1000
+                        altar.echoes += 80
+                    }
+                }
+
+                // Offer Runes for Echoes
+                ritualRow(
+                    title: "Runic Offering",
+                    description: "Offer 3 Runes to gain 120 Echoes.",
+                    costText: "Cost: 3 Runes",
+                    canAfford: user.runes >= 3
+                ) {
+                    if user.runes >= 3 {
+                        user.runes -= 3
+                        altar.echoes += 120
+                    }
+                }
             }
             .padding(.horizontal)
         }
@@ -248,6 +352,25 @@ struct AltarOfWhispersView: View {
         .padding()
         .background(Material.regular)
         .cornerRadius(15)
+    }
+
+    // MARK: - Inventory helpers
+    private func hasAtLeastNMaterials(_ n: Int) -> Bool {
+        let mats = (user.inventory ?? []).filter { ItemDatabase.shared.getItem(id: $0.itemID)?.itemType == .material && $0.quantity > 0 }
+        return mats.reduce(0) { $0 + $1.quantity } >= n
+    }
+    private func consumeMaterials(_ n: Int) -> Bool {
+        var remaining = n
+        guard var inventory = user.inventory else { return false }
+        for inv in inventory where remaining > 0 {
+            guard ItemDatabase.shared.getItem(id: inv.itemID)?.itemType == .material else { continue }
+            let take = min(inv.quantity, remaining)
+            inv.quantity -= take
+            remaining -= take
+        }
+        // Cleanup zero-quantity items
+        user.inventory = inventory.filter { $0.quantity > 0 }
+        return remaining == 0
     }
 
     private func triggerHapticFeedback() {

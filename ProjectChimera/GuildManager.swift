@@ -63,6 +63,12 @@ final class GuildManager: ObservableObject {
         // Give rewards
         user.totalXP += expeditionData.xpReward
         user.gold += calculateGoldReward(for: expeditionData, memberCount: expedition.memberIDs.count)
+        // Courtesy: expedition_echo_kickback – gain echoes when expeditions complete
+        if let level = user.altarCourtesies["expedition_echo_kickback"], level > 0, let altar = user.altarOfWhispers {
+            // 2 echoes per level per member as a simple kickback
+            let echoes = Double(2 * level * expedition.memberIDs.count)
+            altar.echoes += echoes
+        }
         
         // Add items to inventory
         for (itemID, quantity) in expeditionData.lootTable {

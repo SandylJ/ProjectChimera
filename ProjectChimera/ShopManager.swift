@@ -12,7 +12,8 @@ final class ShopManager: ObservableObject {
             return (user.inventory?.first(where: { $0.itemID == keyID })?.quantity ?? 0) > 0
         } else {
             // Check for currency
-            return user.gold >= chest.cost
+            let cost = effectiveChestCost(chest, user: user)
+            return user.gold >= cost
         }
     }
 
@@ -29,7 +30,7 @@ final class ShopManager: ObservableObject {
                 }
             }
         } else {
-            user.gold -= chest.cost
+            user.gold -= effectiveChestCost(chest, user: user)
         }
 
         // 2. Generate and grant loot
@@ -65,5 +66,14 @@ final class ShopManager: ObservableObject {
                 altar.echoes += amount
             }
         }
+    }
+    
+    private func effectiveChestCost(_ chest: TreasureChest, user: User) -> Int {
+        var cost = chest.cost
+        if let level = user.altarCourtesies["shop_patron"], level > 0 {
+            let discount = min(0.5, 0.05 * Double(level))
+            cost = Int(Double(cost) * (1.0 - discount))
+        }
+        return max(0, cost)
     }
 }
