@@ -53,7 +53,7 @@ struct AppTabView: View {
             
             if let user = user {
                 NavigationView {
-                    SpellbookView(user: user)
+                    SpellbookDashboardView(user: user)
                 }
                 .tabItem {
                     Label("Spellbook", systemImage: "book.closed.fill")
