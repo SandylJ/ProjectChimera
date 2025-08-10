@@ -21,10 +21,9 @@ struct LairView: View {
                     if let user = user, let chimera = user.chimera {
                         GlassCard {
                             VStack(alignment: .leading, spacing: 14) {
-                                header
-                                equippedSection(chimera: chimera)
-                                
-                                Group {
+                                                                 equippedSection(chimera: chimera)
+                                 
+                                 Group {
                                     switch activeTab {
                                     case .wardrobe:
                                         WardrobePanel(chimera: chimera)
@@ -60,11 +59,12 @@ struct LairView: View {
                         .padding(.horizontal)
                     }
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 140) // leave room for bottom inset tabs
+                .padding(.top, 80) // give breathing room below the HUD
+                .padding(.bottom, 120) // leave room for bottom inset tabs
             }
             .scrollIndicators(.hidden)
         }
+        .navigationBarTitleDisplayMode(.inline)
         .navigationTitle("Chimera's Lair")
         .onAppear { loadUser() }
         .safeAreaInset(edge: .top) {
