@@ -16,57 +16,67 @@ struct LairView: View {
             GameTheme.bgGradient.ignoresSafeArea()
             SparkleField()
             
-            VStack(spacing: 14) {
-                GameHUD(coins: user?.gold ?? 0, gems: user?.runes ?? 0, keys: user?.inventory?.filter { ItemDatabase.shared.getItem(id: $0.itemID)?.itemType == .key }.reduce(0) { $0 + $1.quantity } ?? 0)
-                
-                if let user = user, let chimera = user.chimera {
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 14) {
-                            header
-                            equippedSection(chimera: chimera)
-                            
-                            Group {
-                                switch activeTab {
-                                case .wardrobe:
-                                    WardrobePanel(chimera: chimera)
-                                case .equipment:
-                                    EquipmentPanel(user: user)
-                                case .inventory:
-                                    InventoryPanel(user: user)
-                                case .stats:
-                                    statsSection(chimera: chimera)
+            ScrollView {
+                VStack(spacing: 14) {
+                    if let user = user, let chimera = user.chimera {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                header
+                                equippedSection(chimera: chimera)
+                                
+                                Group {
+                                    switch activeTab {
+                                    case .wardrobe:
+                                        WardrobePanel(chimera: chimera)
+                                    case .equipment:
+                                        EquipmentPanel(user: user)
+                                    case .inventory:
+                                        InventoryPanel(user: user)
+                                    case .stats:
+                                        statsSection(chimera: chimera)
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                
+                                if activeTab == .stats {
+                                    upgradeButton(user: user, chimera: chimera)
                                 }
                             }
-                            .padding(.horizontal, 14)
-                            
-                            if activeTab == .stats {
-                                upgradeButton(user: user, chimera: chimera)
+                        }
+                        .padding(.horizontal)
+                    } else {
+                        GlassCard {
+                            VStack(spacing: 12) {
+                                Image(systemName: "pawprint.slash").font(.system(size: 46)).foregroundStyle(.white.opacity(0.85))
+                                Text("No Chimera Found").font(.title3.weight(.heavy)).foregroundStyle(.white)
+                                Text("Complete onboarding or create your companion in the Sanctuary.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
                             }
+                            .padding(18)
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
-                } else {
-                    GlassCard {
-                        VStack(spacing: 12) {
-                            Image(systemName: "pawprint.slash").font(.system(size: 46)).foregroundStyle(.white.opacity(0.85))
-                            Text("No Chimera Found").font(.title3.weight(.heavy)).foregroundStyle(.white)
-                            Text("Complete onboarding or create your companion in the Sanctuary.")
-                                .font(.subheadline)
-                                .foregroundStyle(.white.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                        }
-                        .padding(18)
-                    }
-                    .padding(.horizontal)
                 }
-                
-                Spacer(minLength: 0)
-                footerBar
+                .padding(.top, 8)
+                .padding(.bottom, 140) // leave room for bottom inset tabs
             }
+            .scrollIndicators(.hidden)
         }
         .navigationTitle("Chimera's Lair")
         .onAppear { loadUser() }
+        .safeAreaInset(edge: .top) {
+            GameHUD(coins: user?.gold ?? 0, gems: user?.runes ?? 0, keys: user?.inventory?.filter { ItemDatabase.shared.getItem(id: $0.itemID)?.itemType == .key }.reduce(0) { $0 + $1.quantity } ?? 0)
+                .background(Color.clear)
+        }
+        .safeAreaInset(edge: .bottom) {
+            footerBar
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                .background(Color.clear)
+        }
     }
     
     private var header: some View {
@@ -158,7 +168,6 @@ struct LairView: View {
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(0.1)))
-        .padding(.bottom, 10)
     }
     
     private func loadUser() {
@@ -211,6 +220,16 @@ private struct WardrobePanel: View {
                 labeledPicker(title: "Body", selection: $chimera.bodyPartID, options: bodyOptions)
                 labeledPicker(title: "Cosmetic Head", selection: $chimera.cosmeticHeadItemID, options: cosmeticHeadOptions, prettifyPrefix: "item_hat_")
             }
+            
+            // Quick Actions
+            HStack(spacing: 10) {
+                Button("Randomize") { randomizeAppearance() }
+                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient))
+                Button("Reset") { resetAppearance() }
+                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.okGradient))
+                Button("Toggle Hat") { toggleCosmetic() }
+                    .buttonStyle(GlowButtonStyle(gradient: GameTheme.infoGradient))
+            }
         }
         .foregroundStyle(GameTheme.textPrimary)
     }
@@ -243,6 +262,24 @@ private struct WardrobePanel: View {
         default:
             EmptyView()
         }
+    }
+    
+    private func randomizeAppearance() {
+        if let aura = auraOptions.randomElement() { chimera.auraEffectID = aura }
+        if let head = headOptions.randomElement() { chimera.headPartID = head }
+        if let body = bodyOptions.randomElement() { chimera.bodyPartID = body }
+        if let cosmetic = cosmeticHeadOptions.randomElement() { chimera.cosmeticHeadItemID = cosmetic }
+    }
+    
+    private func resetAppearance() {
+        chimera.auraEffectID = "none"
+        chimera.headPartID = "base_head_01"
+        chimera.bodyPartID = "base_body_01"
+        chimera.cosmeticHeadItemID = "none"
+    }
+    
+    private func toggleCosmetic() {
+        chimera.cosmeticHeadItemID = (chimera.cosmeticHeadItemID == "none") ? "item_hat_wizard" : "none"
     }
 }
 
@@ -284,10 +321,11 @@ private struct EquipmentPanel: View {
 private struct InventoryPanel: View {
     @Bindable var user: User
     @State private var filter: InventoryFilter = .all
+    @State private var searchText: String = ""
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 10) {
                 Text("Inventory").font(.title3.bold()).foregroundStyle(.white)
                 Spacer()
                 Picker("Filter", selection: $filter) {
@@ -299,20 +337,29 @@ private struct InventoryPanel: View {
                 .frame(maxWidth: 360)
             }
             
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.7))
+                TextField("Search items...", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+            }
+            .padding(10)
+            .background(GameTheme.panelFill, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(GameTheme.panelStroke))
+            
             if let items = user.inventory, !items.isEmpty {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 12) {
-                        ForEach(filtered(items)) { inv in
-                            InventoryCell(inventoryItem: inv)
-                                .onTapGesture {
-                                    if let item = ItemDatabase.shared.getItem(id: inv.itemID), item.itemType == .equippable {
-                                        EquipmentManager.shared.equipItem(itemID: inv.itemID, for: user)
-                                    }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 12)], spacing: 12) {
+                    ForEach(filtered(items)) { inv in
+                        InventoryCell(inventoryItem: inv)
+                            .onTapGesture {
+                                if let item = ItemDatabase.shared.getItem(id: inv.itemID), item.itemType == .equippable {
+                                    EquipmentManager.shared.equipItem(itemID: inv.itemID, for: user)
                                 }
-                        }
+                            }
                     }
-                    .padding(6)
                 }
+                .padding(6)
+                .padding(10)
                 .background(GameTheme.panelFill, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(GameTheme.panelStroke))
             } else {
@@ -329,14 +376,20 @@ private struct InventoryPanel: View {
     private func filtered(_ list: [InventoryItem]) -> [InventoryItem] {
         list.filter { inv in
             guard let item = ItemDatabase.shared.getItem(id: inv.itemID) else { return false }
+            let matchesType: Bool
             switch filter {
-            case .all: return true
-            case .equippable: return item.itemType == .equippable
-            case .consumable: return item.itemType == .consumable
-            case .material: return item.itemType == .material
-            case .plantable: return item.itemType == .plantable
-            case .keys: return item.itemType == .key
+            case .all: matchesType = true
+            case .equippable: matchesType = item.itemType == .equippable
+            case .consumable: matchesType = item.itemType == .consumable
+            case .material: matchesType = item.itemType == .material
+            case .plantable: matchesType = item.itemType == .plantable
+            case .keys: matchesType = item.itemType == .key
             }
+            if !matchesType { return false }
+            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+            let query = searchText.lowercased()
+            let name = (item.name).lowercased()
+            return name.contains(query) || inv.itemID.lowercased().contains(query)
         }
     }
 }
