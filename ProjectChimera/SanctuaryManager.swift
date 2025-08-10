@@ -27,6 +27,11 @@ final class SanctuaryManager: ObservableObject {
                 actualPlantedAt = actualPlantedAt.addingTimeInterval(itemToPlant.growTime! * multiplier * -1)
             }
         }
+        // Courtesy: garden_whispers – permanent faster plant growth (10% per level)
+        if let level = user.altarCourtesies["garden_whispers"], level > 0, let grow = itemToPlant.growTime {
+            let reduction = min(0.8, 0.10 * Double(level)) // cap at 80%
+            actualPlantedAt = actualPlantedAt.addingTimeInterval(grow * reduction * -1)
+        }
 
         switch plantableType {
         case .habitSeed:

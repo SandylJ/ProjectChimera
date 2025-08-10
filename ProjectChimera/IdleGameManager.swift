@@ -88,6 +88,10 @@ final class IdleGameManager: ObservableObject {
             .reduce(0.0) { $0 + (Double($1.level) * 0.1) } ?? 0.0) : 0.0
 
         var eps = altar.echoesPerSecond * (1.0 + seerBonus)
+        // Courtesy: echo_flow adds a global multiplier of +5% per level
+        if let flowLevel = user.altarCourtesies["echo_flow"], flowLevel > 0 {
+            eps *= (1.0 + 0.05 * Double(flowLevel))
+        }
         // Apply echo boost buffs
         for (effect, expiry) in user.activeBuffs {
             if Date() <= expiry, case .echoBoost(let multiplier) = effect {

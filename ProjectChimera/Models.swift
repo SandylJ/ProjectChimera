@@ -210,6 +210,14 @@ final class User {
         set { equippedItemsData = (try? JSONEncoder().encode(newValue)) ?? Data() }
     }
 
+    // --- NEW: Altar Courtesies (permanent cross-system bonuses unlocked at the Altar) ---
+    private var altarCourtesiesData: Data = Data()
+    /// Map of courtesy key -> level unlocked
+    var altarCourtesies: [String: Int] {
+        get { (try? JSONDecoder().decode([String: Int].self, from: altarCourtesiesData)) ?? [:] }
+        set { altarCourtesiesData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+
     var guild: Guild?
     var team: Team?
     var guildSeals: Int = 0
@@ -269,6 +277,8 @@ final class User {
         self.totalCropsHarvestedByGuild = 0
         self.totalTreesHarvestedByGuild = 0
         self.totalItemsFoundByGuild = 0
+        // Courtesies default
+        self.altarCourtesies = [:]
     }
 
     /// Some legacy code still expects a `name` property on `User`.
