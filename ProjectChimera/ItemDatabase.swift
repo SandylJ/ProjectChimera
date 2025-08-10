@@ -242,6 +242,7 @@ private extension ItemDatabase {
 
     static func createAllQuestTemplates() -> [QuestTemplate] {
         return [
+            // Onboarding / Early-game
             QuestTemplate(
                 id: UUID(),
                 title: "The First Step",
@@ -276,6 +277,123 @@ private extension ItemDatabase {
                 questDescription: "Show your versatility by completing one task from Strength, Mind, and Joy.",
                 type: .exploration(categories: [.strength, .mind, .joy]),
                 rewards: [.experienceBurst(skill: .vitality, amount: 300), .item(id: "item_ancient_key", quantity: 1)]
+            ),
+
+            // Category-focused goals
+            QuestTemplate(
+                id: UUID(),
+                title: "Mind Over Matter",
+                questDescription: "Complete 5 Mind tasks to sharpen your focus.",
+                type: .milestone(category: .mind, count: 5),
+                rewards: [.currency(150), .experienceBurst(skill: .mind, amount: 150)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Heart of Joy",
+                questDescription: "Complete 5 Joy tasks to uplift your spirit.",
+                type: .milestone(category: .joy, count: 5),
+                rewards: [.currency(150), .experienceBurst(skill: .joy, amount: 150)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Forge of Strength",
+                questDescription: "Complete 7 Strength tasks to temper your will.",
+                type: .milestone(category: .strength, count: 7),
+                rewards: [.currency(250), .item(id: "equip_rusty_axe", quantity: 1)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Vital Steps",
+                questDescription: "Complete 5 Vitality tasks to energize your body.",
+                type: .milestone(category: .vitality, count: 5),
+                rewards: [.currency(200), .experienceBurst(skill: .vitality, amount: 200)]
+            ),
+
+            // Streaks
+            QuestTemplate(
+                id: UUID(),
+                title: "Steady Scholar",
+                questDescription: "Do one Mind task for 5 days in a row.",
+                type: .streak(category: .mind, days: 5),
+                rewards: [.runes(2), .item(id: "seed_clarity", quantity: 1)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Joyful Rhythm",
+                questDescription: "Do one Joy task for 4 days in a row.",
+                type: .streak(category: .joy, days: 4),
+                rewards: [.currency(250)]
+            ),
+
+            // Explorations
+            QuestTemplate(
+                id: UUID(),
+                title: "Balance in Motion",
+                questDescription: "Complete one task from Mind, Vitality, and Awareness.",
+                type: .exploration(categories: [.mind, .vitality, .awareness]),
+                rewards: [.experienceBurst(skill: .flow, amount: 250)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "The Full Spectrum",
+                questDescription: "Complete one task from each of Strength, Mind, Joy, and Vitality.",
+                type: .exploration(categories: [.strength, .mind, .joy, .vitality]),
+                rewards: [.currency(400), .runes(2)]
+            ),
+
+            // Mid-game milestones
+            QuestTemplate(
+                id: UUID(),
+                title: "Craft of Order",
+                questDescription: "Complete 8 tasks in the Other category to bring order to chaos.",
+                type: .milestone(category: .other, count: 8),
+                rewards: [.item(id: "item_scroll_fortune", quantity: 1)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Awakened Awareness",
+                questDescription: "Complete 6 Awareness tasks and reflect.",
+                type: .milestone(category: .awareness, count: 6),
+                rewards: [.experienceBurst(skill: .awareness, amount: 300)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Flow State",
+                questDescription: "Complete 6 Flow tasks and ride the wave.",
+                type: .milestone(category: .flow, count: 6),
+                rewards: [.currency(300), .experienceBurst(skill: .flow, amount: 300)]
+            ),
+
+            // Late-game challenges
+            QuestTemplate(
+                id: UUID(),
+                title: "Master of Mind",
+                questDescription: "Complete 10 Mind tasks.",
+                type: .milestone(category: .mind, count: 10),
+                rewards: [.runes(3), .currency(600)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Unbreakable Discipline",
+                questDescription: "Complete 10 Strength tasks.",
+                type: .milestone(category: .strength, count: 10),
+                rewards: [.currency(700), .item(id: "equip_iron_helmet", quantity: 1)]
+            ),
+            QuestTemplate(
+                id: UUID(),
+                title: "Evergreen Joy",
+                questDescription: "Do one Joy task for 7 days in a row.",
+                type: .streak(category: .joy, days: 7),
+                rewards: [.runes(4)]
+            ),
+
+            // Variety / fun
+            QuestTemplate(
+                id: UUID(),
+                title: "Garden Keeper",
+                questDescription: "Complete any 3 tasks related to plants, food, or movement (Joy/Vitality/Flow).",
+                type: .exploration(categories: [.joy, .vitality, .flow]),
+                rewards: [.item(id: "seed_prosperity", quantity: 1), .currency(250)]
             )
         ]
     }
