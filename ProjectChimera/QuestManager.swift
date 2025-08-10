@@ -49,6 +49,13 @@ final class QuestManager {
         for reward in quest.rewards {
             IdleGameManager.shared.grantLoot(reward, to: user, context: context)
         }
+        // Record an achievement in the completion log
+        AchievementManager.shared.unlock(
+            title: "Completed: \(quest.title)",
+            description: quest.questDescription,
+            for: user,
+            context: context
+        )
         context.delete(quest)
     }
 }
