@@ -59,7 +59,7 @@ struct LairView: View {
                         .padding(.horizontal)
                     }
                 }
-                .padding(.top, 80) // give breathing room below the HUD
+                .padding(.top, 120) // give breathing room below the HUD
                 .padding(.bottom, 120) // leave room for bottom inset tabs
             }
             .scrollIndicators(.hidden)
@@ -107,12 +107,15 @@ struct LairView: View {
                 Text(chimera.name).font(.headline).foregroundStyle(GameTheme.textPrimary)
                 Text("Discipline \(chimera.discipline) • Mindfulness \(chimera.mindfulness)")
                     .font(.footnote).foregroundStyle(GameTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 ProgressBar(progress: upgradeProgress)
                     .frame(height: 10)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                // Move aura chip below to avoid horizontal crowding on small widths
+                Chip(text: "Aura: \(chimera.auraEffectID.capitalized.replacingOccurrences(of: "_", with: " "))")
             }
-            Spacer()
-            Chip(text: "Aura: \(chimera.auraEffectID.capitalized.replacingOccurrences(of: "_", with: " "))")
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .background(GameTheme.panelFill, in: RoundedRectangle(cornerRadius: 16))

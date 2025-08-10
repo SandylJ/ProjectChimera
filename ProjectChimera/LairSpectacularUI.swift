@@ -48,6 +48,8 @@ struct CurrencyBadge: View {
             }
             Text("\(amount)")
                 .font(.system(.headline, design: .rounded)).monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .foregroundStyle(GameTheme.textPrimary)
         }
         .padding(.vertical, 6).padding(.horizontal, 10)
