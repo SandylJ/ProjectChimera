@@ -116,14 +116,37 @@ extension SpellEffect {
         switch self {
         case .doubleXP: return "Double XP"
         case .doubleGold: return "Double Gold"
-        case .xpBoost(let stat, let multiplier): return "+\(Int(multiplier * 100))% \(stat.rawValue.capitalized) XP"
-        case .goldBoost(let multiplier): return "+\(Int(multiplier * 100))% Gold"
-        case .runeBoost(let multiplier): return "+\(Int(multiplier * 100))% Runes"
-        case .willpowerGeneration(let amount): return "+\(amount) Willpower/min"
-        case .reducedUpgradeCost(let percentage): return "-\(Int(percentage * 100))% Upgrade Cost"
-        case .guildXpBoost(let multiplier): return "+\(Int(multiplier * 100))% Guild XP"
-        case .plantGrowthSpeed(let multiplier): return "+\(Int(multiplier * 100))% Plant Growth"
-        case .echoBoost(let multiplier): return "+\(Int(multiplier * 100))% Echoes"
+        case .xpBoost(let stat, let multiplier):
+            let pct = multiplier >= 1.0 ? (multiplier - 1.0) : multiplier
+            return "+\(Int(pct * 100))% \(stat.rawValue.capitalized) XP"
+        case .goldBoost(let multiplier):
+            let pct = multiplier >= 1.0 ? (multiplier - 1.0) : multiplier
+            return "+\(Int(pct * 100))% Gold"
+        case .runeBoost(let multiplier):
+            let pct = multiplier >= 1.0 ? (multiplier - 1.0) : multiplier
+            return "+\(Int(pct * 100))% Runes"
+        case .willpowerGeneration(let amount):
+            return "+\(amount) Willpower/min"
+        case .reducedUpgradeCost(let value):
+            // Accept both semantics: value as delta (0.05 => 5%) or as multiplier (0.90 => 10%)
+            let pct: Double
+            if value <= 0.5 {
+                pct = value
+            } else if value < 1.0 {
+                pct = 1.0 - value
+            } else {
+                pct = 0.0
+            }
+            return "-\(Int(pct * 100))% Upgrade Cost"
+        case .guildXpBoost(let multiplier):
+            let pct = multiplier >= 1.0 ? (multiplier - 1.0) : multiplier
+            return "+\(Int(pct * 100))% Guild XP"
+        case .plantGrowthSpeed(let multiplier):
+            let pct = multiplier >= 1.0 ? (multiplier - 1.0) : multiplier
+            return "+\(Int(pct * 100))% Plant Growth"
+        case .echoBoost(let multiplier):
+            let pct = multiplier >= 1.0 ? (multiplier - 1.0) : multiplier
+            return "+\(Int(pct * 100))% Echoes"
         }
     }
     var systemImage: String {

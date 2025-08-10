@@ -86,36 +86,55 @@ struct SpellbookView: View {
     }
 
     // MARK: - Book Layout
-
+    
     private var openBook: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let pageWidth = min(600.0, width - 32) // keep nice margins
-
+            let isWide = width >= 700
+            let pageWidth = min(isWide ? 1000.0 : width - 32, width - 32)
+            
             VStack(spacing: 16) {
                 // Book spine tabs / filters
                 filterTabs
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: 22)
-                        .fill(.thinMaterial)
-                        .overlay(bookTextureInset)
-                        .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 10)
-
-                    // Two-page layout
-                    HStack(spacing: 0) {
-                        bookPageLeft
-                            .frame(width: pageWidth/2)
-                            .padding(.leading, 18)
-                            .padding(.vertical, 18)
-                        Divider().blendMode(.overlay)
-                        bookPageRight
-                            .frame(width: pageWidth/2)
-                            .padding(.trailing, 18)
-                            .padding(.vertical, 18)
+                
+                if isWide {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(.thinMaterial)
+                            .overlay(bookTextureInset)
+                            .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 10)
+                        
+                        // Two-page layout
+                        HStack(spacing: 0) {
+                            bookPageLeft
+                                .frame(width: pageWidth/2)
+                                .padding(.leading, 18)
+                                .padding(.vertical, 18)
+                            Divider().blendMode(.overlay)
+                            bookPageRight
+                                .frame(width: pageWidth/2)
+                                .padding(.trailing, 18)
+                                .padding(.vertical, 18)
+                        }
                     }
+                    .frame(width: pageWidth, alignment: .center)
+                } else {
+                    // Compact: stack pages vertically within the same styled container
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(.thinMaterial)
+                            .overlay(bookTextureInset)
+                            .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 10)
+                        
+                        VStack(alignment: .leading, spacing: 18) {
+                            bookPageLeft
+                            Divider().blendMode(.overlay)
+                            bookPageRight
+                        }
+                        .padding(18)
+                    }
+                    .frame(width: pageWidth, alignment: .center)
                 }
-                .frame(width: pageWidth, alignment: .center)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
