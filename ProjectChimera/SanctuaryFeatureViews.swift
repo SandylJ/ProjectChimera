@@ -52,7 +52,9 @@ public struct HabitGardenView: View {
                     }
                     .padding(.horizontal)
                 }
-                .padding(.vertical, 18)
+                // Add headroom so content never overlaps the top HUD or nav bar
+                .padding(.top, 96)
+                .padding(.bottom, 120)
             }
         }
         .navigationBarTitleDisplayMode(.inline)
