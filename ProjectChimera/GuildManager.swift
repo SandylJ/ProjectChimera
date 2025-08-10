@@ -340,6 +340,36 @@ final class GuildManager: ObservableObject {
         }
     }
     
+    // MARK: - Hunt Deduplication
+    /// Merge multiple `ActiveHunt` entries targeting the same `enemyID` into a single hunt.
+    /// Combines member assignments, sums kills, and keeps the earliest `lastUpdated` to avoid over-estimation.
+    func mergeDuplicateHunts(for user: User, context: ModelContext) {
+        guard var hunts = user.activeHunts, !hunts.isEmpty else { return }
+        let groups = Dictionary(grouping: hunts, by: { $0.enemyID })
+        var didChange = false
+        for (_, group) in groups where group.count > 1 {
+            guard let primary = group.first else { continue }
+            var combinedMemberIDs = Set(primary.memberIDs)
+            var totalKills = primary.killsAccumulated
+            var earliestLastUpdated = primary.lastUpdated
+            for duplicate in group.dropFirst() {
+                combinedMemberIDs.formUnion(duplicate.memberIDs)
+                totalKills += duplicate.killsAccumulated
+                earliestLastUpdated = min(earliestLastUpdated, duplicate.lastUpdated)
+                // Remove from user's list and delete from context
+                user.activeHunts?.removeAll { $0.id == duplicate.id }
+                context.delete(duplicate)
+                didChange = true
+            }
+            primary.memberIDs = Array(combinedMemberIDs)
+            primary.killsAccumulated = totalKills
+            primary.lastUpdated = earliestLastUpdated
+        }
+        if didChange {
+            do { try context.save() } catch { print("Failed saving after merging hunts: \(error)") }
+        }
+    }
+
     // Exposed so UI can reflect the real-time KPS used by the engine
     func calculateHuntKillsPerSecond(hunt: ActiveHunt, user: User) -> Double {
         let members: [GuildMember] = hunt.memberIDs.compactMap { memberID in
