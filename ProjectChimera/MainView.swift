@@ -36,6 +36,14 @@ struct AppTabView: View {
                 .tabItem {
                     Label("Character", systemImage: "person.fill")
                 }
+
+            // Lair: Character customization + inventory dashboard
+            NavigationView {
+                LairView()
+            }
+            .tabItem {
+                Label("Lair", systemImage: "pawprint.circle.fill")
+            }
             
             // Promote Sanctuary to second tab for prominence
             SanctuaryView()
