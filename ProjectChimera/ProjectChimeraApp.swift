@@ -13,6 +13,7 @@ struct ProjectChimeraApp: App {
     @StateObject private var sanctuaryManager = SanctuaryManager.shared
     @StateObject private var guildManager = GuildManager.shared
     @StateObject private var shopManager = ShopManager.shared
+    @StateObject private var layoutSettings = LayoutSettings.shared
 
     var body: some Scene {
         WindowGroup {
@@ -26,6 +27,7 @@ struct ProjectChimeraApp: App {
                 .environmentObject(sanctuaryManager)
                 .environmentObject(guildManager)
                 .environmentObject(shopManager)
+                .environmentObject(layoutSettings)
                 .modelContainer(for: [
                     User.self,
                     Task.self,
